@@ -1,0 +1,22 @@
+# Output directory
+/output/
+/archive/
+/test-output/
+
+# Claude
+.claude/
+
+# Clojure
+.cpcache/
+.nrepl-port
+*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.calva/
+
+# OS
+.DS_Store
+Thumbs.db
