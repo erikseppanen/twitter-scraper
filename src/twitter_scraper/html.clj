@@ -5,8 +5,9 @@
             [clojure.string :as str]
             [twitter-scraper.util :as util]))
 
-(def theme-toggle-script
+(def page-script
   "document.addEventListener('DOMContentLoaded', function() {
+    // Theme toggle
     var toggle = document.getElementById('theme-toggle');
     var html = document.documentElement;
     var stored = localStorage.getItem('theme');
@@ -19,6 +20,15 @@
         localStorage.setItem('theme', next);
       });
     }
+    // Show more toggle
+    document.querySelectorAll('.show-more-link').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        var container = this.closest('.tweet-text-container');
+        container.classList.toggle('expanded');
+        this.textContent = container.classList.contains('expanded') ? 'Show less' : 'Show more';
+      });
+    });
   });")
 
 (defn html-page
@@ -36,7 +46,7 @@
         [:link {:rel "stylesheet" :href css-path}])]
      [:body
       content
-      [:script (raw-string theme-toggle-script)]]])))
+      [:script (raw-string page-script)]]])))
 
 (defn linkify-text
   "Convert URLs, mentions, and hashtags in text to links."
@@ -173,6 +183,20 @@
       (spit file-path html)
       file-path)))
 
+(def tweet-truncate-length 280)
+
+(defn render-tweet-text
+  "Render tweet text, with Show more link for long tweets."
+  [text]
+  (when text
+    (let [is-long? (> (count text) tweet-truncate-length)]
+      (if is-long?
+        [:div.tweet-text-container
+         [:p.tweet-text.truncated (raw-string (linkify-text text))]
+         [:a.show-more-link {:href "#"} "Show more"]]
+        [:div.tweet-text-container.expanded
+         [:p.tweet-text (raw-string (linkify-text text))]]))))
+
 (defn render-tweet-card
   "Render a single tweet as a card.
    media-prefix determines the path prefix for local media files."
@@ -197,8 +221,7 @@
                       :title "View on Twitter"}
        "↗"]]
      [:div.tweet-content
-      (when text
-        [:p.tweet-text (raw-string (linkify-text text))])]
+      (render-tweet-text text)]
      (render-media-grid media media-prefix)
      (render-article-card article tweet-id articles-prefix)
      [:footer.tweet-footer
