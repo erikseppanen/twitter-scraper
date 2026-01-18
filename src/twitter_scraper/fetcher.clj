@@ -9,6 +9,16 @@
 (def syndication-url "https://cdn.syndication.twimg.com/tweet-result")
 (def fxtwitter-url "https://api.fxtwitter.com/status")
 
+(defn extract-article-id
+  "Extract article ID from tweet entities if present."
+  [tweet-data]
+  (let [urls (get-in tweet-data [:entities :urls] [])]
+    (->> urls
+         (map :expanded_url)
+         (filter some?)
+         (some #(when-let [match (re-find #"x\.com/i/article/(\d+)" %)]
+                  (second match))))))
+
 (def default-headers
   {"User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
    "Accept" "application/json"
@@ -84,6 +94,27 @@
     (catch Exception _
       nil)))
 
+(defn fetch-article-data
+  "Fetch article data from fxtwitter API."
+  [tweet-id]
+  (try
+    (let [response (http/get (str fxtwitter-url "/" tweet-id)
+                            {:headers default-headers
+                             :as :json
+                             :throw-exceptions false})]
+      (when (= 200 (:status response))
+        (when-let [article (get-in response [:body :tweet :article])]
+          {:article-id (:id article)
+           :title (:title article)
+           :preview-text (:preview_text article)
+           :cover-image (get-in article [:cover_media :media_info :original_img_url])
+           :created-at (:created_at article)
+           :content-blocks (get-in article [:content :blocks] [])
+           :media-entities (:media_entities article)})))
+    (catch Exception e
+      (util/log-warn "Failed to fetch article for tweet" tweet-id "-" (.getMessage e))
+      nil)))
+
 (defn fetch-tweet-data
   "Fetch full tweet data from Twitter's syndication API.
    Returns parsed tweet data or nil if not found/deleted."
@@ -102,18 +133,24 @@
                   ;; Fetch full text for long tweets
                   full-text (if is-long-tweet?
                               (fetch-full-text tweet-id)
-                              nil)]
+                              nil)
+                  ;; Check for article link
+                  article-id (extract-article-id body)
+                  ;; Fetch article data if present
+                  article (when article-id
+                            (fetch-article-data tweet-id))]
               (when body
-                {:tweet-id tweet-id
-                 :text (or full-text (:text body))
-                 :created-at (:created_at body)
-                 :user {:name (get-in body [:user :name])
-                        :screen-name (get-in body [:user :screen_name])
-                        :profile-image (get-in body [:user :profile_image_url_https])}
-                 :media (extract-media body)
-                 :metrics {:likes (get-in body [:favorite_count] 0)
-                           :retweets (get-in body [:conversation_count] 0)}
-                 :raw body}))
+                (cond-> {:tweet-id tweet-id
+                         :text (or full-text (:text body))
+                         :created-at (:created_at body)
+                         :user {:name (get-in body [:user :name])
+                                :screen-name (get-in body [:user :screen_name])
+                                :profile-image (get-in body [:user :profile_image_url_https])}
+                         :media (extract-media body)
+                         :metrics {:likes (get-in body [:favorite_count] 0)
+                                   :retweets (get-in body [:conversation_count] 0)}
+                         :raw body}
+                  article (assoc :article article))))
         404 (do (util/log-warn "Tweet not found:" tweet-id)
                 nil)
         (do (util/log-warn "Failed to fetch tweet" tweet-id "- Status:" (:status response))
@@ -201,6 +238,27 @@
                    results)
                  (inc idx)))))))
 
+(defn download-article-cover
+  "Download article cover image for a tweet.
+   Returns updated tweet with local cover path."
+  [tweet articles-dir]
+  (if-let [article (:article tweet)]
+    (if-let [cover-url (:cover-image article)]
+      (let [tweet-id (:tweet-id tweet)
+            filename (str tweet-id "-cover.jpg")
+            dest-path (str articles-dir "/" filename)]
+        (if (util/file-exists? dest-path)
+          (do
+            (util/log-info "Skipping existing article cover:" filename)
+            (assoc-in tweet [:article :local-cover] filename))
+          (if (download-file cover-url dest-path)
+            (do
+              (util/log-info "Downloaded article cover:" filename)
+              (assoc-in tweet [:article :local-cover] filename))
+            tweet)))
+      tweet)
+    tweet))
+
 (defn download-all-media
   "Download media for all tweets.
    Returns tweets with updated local paths."
@@ -213,3 +271,13 @@
             (when on-progress (on-progress idx total (:tweet-id tweet)))
             (download-media tweet media-dir)))
          vec)))
+
+(defn download-all-article-covers
+  "Download article cover images for tweets with articles.
+   Returns tweets with updated local paths."
+  [tweets articles-dir]
+  (util/ensure-directory articles-dir)
+  (let [tweets-with-articles (filter :article tweets)]
+    (when (seq tweets-with-articles)
+      (util/log-info "Downloading" (count tweets-with-articles) "article covers..."))
+    (mapv #(download-article-cover % articles-dir) tweets)))

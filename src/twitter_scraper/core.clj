@@ -137,11 +137,13 @@
             (if skip-media
               (do (util/log-info "Skipping media download")
                   tweets)
-              (let [media-dir (str output "/media")]
-                (fetcher/download-all-media
-                 tweets
-                 media-dir
-                 {:on-progress #(print-progress "Media" %1 %2 %3)})))]
+              (let [media-dir (str output "/media")
+                    articles-dir (str output "/articles")]
+                (-> tweets
+                    (fetcher/download-all-media
+                     media-dir
+                     {:on-progress #(print-progress "Media" %1 %2 %3)})
+                    (fetcher/download-all-article-covers articles-dir))))]
 
         (util/log-info "")
 
