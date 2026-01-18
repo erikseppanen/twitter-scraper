@@ -18,47 +18,57 @@
   [tweet-data]
   (let [photos (or (:photos tweet-data) [])
         video (:video tweet-data)
-        media-entities (get-in tweet-data [:mediaDetails] [])]
-    (concat
-     ;; Photos from photos array
-     (->> photos
-          (map (fn [photo]
-                 {:type :photo
-                  :url (:url photo)
-                  :expanded-url (:expandedUrl photo)})))
-     ;; Video if present
-     (when video
-       (let [variants (get-in video [:variants] [])
-             best-variant (->> variants
-                              (filter #(= "video/mp4" (:content_type %)))
-                              (sort-by :bitrate >)
-                              first)]
-         (when best-variant
-           [{:type :video
-             :url (:src best-variant)
-             :poster (get-in video [:poster])}])))
-     ;; Media details (alternative location)
-     (->> media-entities
-          (map (fn [media]
-                 (let [media-type (keyword (:type media))]
-                   (case media-type
-                     :photo {:type :photo
-                             :url (:media_url_https media)}
-                     :video (let [variants (get-in media [:video_info :variants] [])
-                                  best (->> variants
-                                           (filter #(= "video/mp4" (:content_type %)))
-                                           (sort-by :bitrate >)
-                                           first)]
-                              {:type :video
-                               :url (:url best)
-                               :poster (:media_url_https media)})
-                     :animated_gif (let [variants (get-in media [:video_info :variants] [])
-                                         gif-url (-> variants first :url)]
-                                     {:type :gif
-                                      :url gif-url
-                                      :poster (:media_url_https media)})
-                     nil))))
-          (filter some?)))))
+        media-entities (get-in tweet-data [:mediaDetails] [])
+        all-media
+        (concat
+         ;; Photos from photos array
+         (->> photos
+              (map (fn [photo]
+                     {:type :photo
+                      :url (:url photo)
+                      :expanded-url (:expandedUrl photo)})))
+         ;; Video if present
+         (when video
+           (let [variants (get-in video [:variants] [])
+                 best-variant (->> variants
+                                   (filter #(= "video/mp4" (:content_type %)))
+                                   (sort-by :bitrate >)
+                                   first)]
+             (when best-variant
+               [{:type :video
+                 :url (:src best-variant)
+                 :poster (get-in video [:poster])}])))
+         ;; Media details (alternative location)
+         (->> media-entities
+              (map (fn [media]
+                     (let [media-type (keyword (:type media))]
+                       (case media-type
+                         :photo {:type :photo
+                                 :url (:media_url_https media)}
+                         :video (let [variants (get-in media [:video_info :variants] [])
+                                      best (->> variants
+                                                (filter #(= "video/mp4" (:content_type %)))
+                                                (sort-by :bitrate >)
+                                                first)]
+                                  {:type :video
+                                   :url (:url best)
+                                   :poster (:media_url_https media)})
+                         :animated_gif (let [variants (get-in media [:video_info :variants] [])
+                                             gif-url (-> variants first :url)]
+                                         {:type :gif
+                                          :url gif-url
+                                          :poster (:media_url_https media)})
+                         nil))))
+              (filter some?)))]
+    ;; Deduplicate by URL (keep first occurrence)
+    (->> all-media
+         (reduce (fn [[seen result] media]
+                   (let [url (:url media)]
+                     (if (seen url)
+                       [seen result]
+                       [(conj seen url) (conj result media)])))
+                 [#{} []])
+         second)))
 
 (defn fetch-tweet-data
   "Fetch full tweet data from Twitter's syndication API.
