@@ -7,6 +7,7 @@
   (:import [java.io FileOutputStream]))
 
 (def syndication-url "https://cdn.syndication.twimg.com/tweet-result")
+(def fxtwitter-url "https://api.fxtwitter.com/status")
 
 (def default-headers
   {"User-Agent" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
@@ -70,6 +71,19 @@
                  [#{} []])
          second)))
 
+(defn fetch-full-text
+  "Fetch full text for long tweets from fxtwitter API."
+  [tweet-id]
+  (try
+    (let [response (http/get (str fxtwitter-url "/" tweet-id)
+                            {:headers default-headers
+                             :as :json
+                             :throw-exceptions false})]
+      (when (= 200 (:status response))
+        (get-in response [:body :tweet :text])))
+    (catch Exception _
+      nil)))
+
 (defn fetch-tweet-data
   "Fetch full tweet data from Twitter's syndication API.
    Returns parsed tweet data or nil if not found/deleted."
@@ -82,10 +96,16 @@
                              :as :json
                              :throw-exceptions false})]
       (case (:status response)
-        200 (let [body (:body response)]
+        200 (let [body (:body response)
+                  ;; Check if this is a long tweet (has note_tweet)
+                  is-long-tweet? (some? (:note_tweet body))
+                  ;; Fetch full text for long tweets
+                  full-text (if is-long-tweet?
+                              (fetch-full-text tweet-id)
+                              nil)]
               (when body
                 {:tweet-id tweet-id
-                 :text (:text body)
+                 :text (or full-text (:text body))
                  :created-at (:created_at body)
                  :user {:name (get-in body [:user :name])
                         :screen-name (get-in body [:user :screen_name])
