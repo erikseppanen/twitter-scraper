@@ -168,6 +168,34 @@ a:hover {
   word-wrap: break-word;
 }
 
+/* Show more/less for long tweets */
+.tweet-text-container:not(.expanded) .tweet-text.truncated {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tweet-text-container.expanded .tweet-text {
+  display: block;
+}
+
+.show-more-link {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--link-color);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.show-more-link:hover {
+  text-decoration: underline;
+}
+
+.tweet-text-container.expanded .show-more-link {
+  display: inline-block;
+}
+
 /* Media Grid */
 .media-grid {
   display: grid;
