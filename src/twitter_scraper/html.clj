@@ -3,11 +3,12 @@
             [hiccup.util :refer [raw-string]]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [cheshire.core :as json]
             [twitter-scraper.util :as util]))
 
-(def page-script
+;; Simple script for individual tweet/article pages
+(def simple-page-script
   "document.addEventListener('DOMContentLoaded', function() {
-    // Theme toggle
     var toggle = document.getElementById('theme-toggle');
     var html = document.documentElement;
     var stored = localStorage.getItem('theme');
@@ -20,7 +21,6 @@
         localStorage.setItem('theme', next);
       });
     }
-    // Show more toggle
     document.querySelectorAll('.show-more-link').forEach(function(link) {
       link.addEventListener('click', function(e) {
         e.preventDefault();
@@ -31,9 +31,304 @@
     });
   });")
 
+;; Main app script for index page with virtual scrolling
+(def index-app-script
+  "
+(function() {
+  var allTweets = [];
+  var filteredTweets = [];
+  var BATCH_SIZE = 50;
+  var loadedCount = 0;
+  var isLoading = false;
+  var searchQuery = '';
+  var activeAuthor = null;
+  var container = document.getElementById('tweet-list');
+  var statusEl = document.getElementById('status');
+  var searchInput = document.getElementById('search');
+  var filtersEl = document.getElementById('filters');
+
+  // Theme
+  var html = document.documentElement;
+  var stored = localStorage.getItem('theme');
+  if (stored) html.setAttribute('data-theme', stored);
+  document.getElementById('theme-toggle').addEventListener('click', function() {
+    var current = html.getAttribute('data-theme');
+    var next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+  });
+
+  function escapeHtml(text) {
+    if (!text) return '';
+    return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function linkifyText(text) {
+    if (!text) return '';
+    return escapeHtml(text)
+      .replace(/(https?:\\/\\/[^\\s]+)/g, '<a href=\"$1\" target=\"_blank\" rel=\"noopener\">$1</a>')
+      .replace(/@(\\w+)/g, '<a href=\"https://twitter.com/$1\" target=\"_blank\" rel=\"noopener\">@$1</a>')
+      .replace(/#(\\w+)/g, '<a href=\"https://twitter.com/hashtag/$1\" target=\"_blank\" rel=\"noopener\">#$1</a>');
+  }
+
+  function highlightText(html, query) {
+    if (!query || !html) return html;
+    var escaped = query.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+    var regex = new RegExp('(' + escaped + ')', 'gi');
+    return html.replace(regex, '<mark>$1</mark>');
+  }
+
+  function renderMedia(media) {
+    if (!media || !media.length) return '';
+    var count = Math.min(media.length, 4);
+    var html = '<div class=\"media-grid media-count-' + count + '\">';
+    media.forEach(function(m) {
+      var src = m.localPath ? 'media/' + m.localPath : m.url;
+      if (m.type === 'photo') {
+        html += '<div class=\"media-item\"><a href=\"' + src + '\" target=\"_blank\"><img src=\"' + src + '\" alt=\"\" loading=\"lazy\"></a></div>';
+      } else if (m.type === 'video') {
+        html += '<div class=\"media-item\"><video controls preload=\"metadata\"' + (m.poster ? ' poster=\"' + m.poster + '\"' : '') + '><source src=\"' + src + '\" type=\"video/mp4\"></video></div>';
+      } else if (m.type === 'gif') {
+        html += '<div class=\"media-item\"><video autoplay loop muted playsinline><source src=\"' + src + '\" type=\"video/mp4\"></video></div>';
+      }
+    });
+    return html + '</div>';
+  }
+
+  function renderArticle(article, tweetId, query) {
+    if (!article) return '';
+    var cover = article.coverImage ? '<div class=\"article-cover\"><img src=\"articles/' + tweetId + '-cover.jpg\" alt=\"\" loading=\"lazy\"></div>' : '';
+    var titleHtml = escapeHtml(article.title);
+    var previewHtml = article.previewText ? escapeHtml(article.previewText).substring(0, 150) : '';
+    if (query) {
+      titleHtml = highlightText(titleHtml, query);
+      previewHtml = highlightText(previewHtml, query);
+    }
+    var preview = previewHtml ? '<p class=\"article-preview\">' + previewHtml + '</p>' : '';
+    return '<a class=\"article-card\" href=\"articles/' + tweetId + '.html\">' + cover + '<div class=\"article-info\"><h3 class=\"article-title\">' + titleHtml + '</h3>' + preview + '</div></a>';
+  }
+
+  function renderQuote(quote, query) {
+    if (!quote) return '';
+    var user = quote.user || {};
+    var screenName = user.screenName || '';
+    var displayName = escapeHtml(user.name || screenName);
+    var textHtml = quote.text ? linkifyText(quote.text) : '';
+    if (query) textHtml = highlightText(textHtml, query);
+
+    var articleHtml = '';
+    var quoteLink = 'https://twitter.com/i/status/' + quote.tweetId;
+    if (quote.article) {
+      var art = quote.article;
+      // Link to local article page
+      quoteLink = 'articles/' + quote.tweetId + '.html';
+      var cover = art.coverImage ? '<div class=\"quote-article-cover\"><img src=\"articles/' + quote.tweetId + '-cover.jpg\" alt=\"\" loading=\"lazy\"></div>' : '';
+      var title = escapeHtml(art.title || '');
+      var preview = art.previewText ? escapeHtml(art.previewText).substring(0, 100) + '...' : '';
+      articleHtml = '<div class=\"quote-article\">' + cover + '<div class=\"quote-article-info\"><div class=\"quote-article-title\">' + title + '</div><div class=\"quote-article-preview\">' + preview + '</div></div></div>';
+    }
+
+    return '<a class=\"quote-card\" href=\"' + quoteLink + '\"' + (quote.article ? '' : ' target=\"_blank\" rel=\"noopener\"') + '>' +
+      '<div class=\"quote-header\"><span class=\"quote-name\">' + displayName + '</span> <span class=\"quote-username\">@' + escapeHtml(screenName) + '</span></div>' +
+      (textHtml ? '<div class=\"quote-text\">' + textHtml + '</div>' : '') +
+      articleHtml +
+      '</a>';
+  }
+
+  function renderTweet(t, query) {
+    var isLong = t.text && t.text.length > 280;
+    var textClass = isLong ? 'tweet-text-container' : 'tweet-text-container expanded';
+    var linkedText = linkifyText(t.text);
+    var highlightedText = query ? highlightText(linkedText, query) : linkedText;
+    var textHtml = t.text ? '<div class=\"' + textClass + '\"><p class=\"tweet-text' + (isLong ? ' truncated' : '') + '\">' + highlightedText + '</p>' + (isLong ? '<a class=\"show-more-link\" href=\"#\">Show more</a>' : '') + '</div>' : '';
+
+    var avatar = t.user.profileImage ? '<img class=\"avatar\" src=\"' + t.user.profileImage + '\" alt=\"\" loading=\"lazy\">' : '';
+    var date = t.createdAt ? '<time class=\"tweet-date\">' + new Date(t.createdAt).toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'}) + '</time>' : '';
+
+    var displayName = escapeHtml(t.user.name);
+    var screenName = escapeHtml(t.user.screenName);
+    if (query) {
+      displayName = highlightText(displayName, query);
+      screenName = highlightText(screenName, query);
+    }
+
+    var articleHtml = renderArticle(t.article, t.tweetId, query);
+    var quoteHtml = renderQuote(t.quote, query);
+
+    return '<article class=\"tweet-card\" id=\"tweet-' + t.tweetId + '\">' +
+      '<header class=\"tweet-header\">' + avatar +
+      '<div class=\"user-info\"><span class=\"display-name\">' + displayName + '</span><span class=\"username\" data-author=\"' + escapeHtml(t.user.screenName) + '\">@' + screenName + '</span></div>' +
+      '<a class=\"tweet-link\" href=\"https://twitter.com/i/status/' + t.tweetId + '\" target=\"_blank\" rel=\"noopener\" title=\"View on Twitter\">↗</a></header>' +
+      '<div class=\"tweet-content\">' + textHtml + '</div>' +
+      renderMedia(t.media) +
+      articleHtml +
+      quoteHtml +
+      '<footer class=\"tweet-footer\">' + date + '<a class=\"tweet-page-link\" href=\"tweets/' + t.tweetId + '.html\">View page →</a></footer></article>';
+  }
+
+  function loadMore() {
+    if (isLoading || loadedCount >= filteredTweets.length) return;
+    isLoading = true;
+    var fragment = document.createDocumentFragment();
+    var end = Math.min(loadedCount + BATCH_SIZE, filteredTweets.length);
+    var temp = document.createElement('div');
+    for (var i = loadedCount; i < end; i++) {
+      temp.innerHTML = renderTweet(filteredTweets[i], searchQuery);
+      fragment.appendChild(temp.firstChild);
+    }
+    container.appendChild(fragment);
+    loadedCount = end;
+    updateStatus();
+    isLoading = false;
+    bindShowMore();
+    bindClickableFilters();
+  }
+
+  function bindShowMore() {
+    container.querySelectorAll('.show-more-link').forEach(function(link) {
+      if (link.dataset.bound) return;
+      link.dataset.bound = '1';
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        var c = this.closest('.tweet-text-container');
+        c.classList.toggle('expanded');
+        this.textContent = c.classList.contains('expanded') ? 'Show less' : 'Show more';
+      });
+    });
+  }
+
+  function bindClickableFilters() {
+    container.querySelectorAll('.username').forEach(function(el) {
+      if (el.dataset.bound) return;
+      el.dataset.bound = '1';
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', function(e) {
+        e.preventDefault();
+        setAuthorFilter(this.dataset.author);
+      });
+    });
+  }
+
+  function updateStatus() {
+    var showing = loadedCount;
+    var total = filteredTweets.length;
+    var allTotal = allTweets.length;
+    var parts = [];
+    if (activeAuthor) parts.push('by @' + activeAuthor);
+    if (searchQuery) parts.push('matching \"' + searchQuery + '\"');
+    var filterDesc = parts.length ? ' (' + parts.join(', ') + ')' : '';
+    statusEl.textContent = 'Showing ' + showing + ' of ' + total + filterDesc + ' from ' + allTotal + ' tweets';
+  }
+
+  function buildFilterUI() {
+    // Count authors
+    var authorCounts = {};
+    allTweets.forEach(function(t) {
+      var author = t.user && t.user.screenName;
+      if (author) {
+        authorCounts[author] = (authorCounts[author] || 0) + 1;
+      }
+    });
+
+    // Sort by count
+    var topAuthors = Object.entries(authorCounts).sort(function(a,b) { return b[1] - a[1]; }).slice(0, 30);
+
+    var html = '<div class=\"filter-row\"><span class=\"filter-label\">Authors:</span><div class=\"filter-tags-scroll\">';
+    topAuthors.forEach(function(a) {
+      html += '<button class=\"filter-tag\" data-author=\"' + escapeHtml(a[0]) + '\">@' + escapeHtml(a[0]) + ' <span class=\"count\">' + a[1] + '</span></button>';
+    });
+    html += '</div></div>';
+
+    filtersEl.innerHTML = html;
+
+    // Bind filter clicks
+    filtersEl.querySelectorAll('[data-author]').forEach(function(btn) {
+      btn.addEventListener('click', function() { setAuthorFilter(this.dataset.author); });
+    });
+
+    // Bind clear button from header
+    var clearBtn = document.getElementById('clear-filters');
+    if (clearBtn) clearBtn.addEventListener('click', clearFilters);
+  }
+
+  function setAuthorFilter(author) {
+    activeAuthor = (activeAuthor === author) ? null : author;
+    updateActiveFilterUI();
+    applyFilter();
+    updateClearButton();
+  }
+
+  function clearFilters() {
+    activeAuthor = null;
+    searchQuery = '';
+    searchInput.value = '';
+    updateActiveFilterUI();
+    applyFilter();
+    updateClearButton();
+  }
+
+  function updateClearButton() {
+    var clearBtn = document.getElementById('clear-filters');
+    if (clearBtn) {
+      clearBtn.style.display = (activeAuthor || searchQuery) ? '' : 'none';
+    }
+  }
+
+  function updateActiveFilterUI() {
+    filtersEl.querySelectorAll('.filter-tag').forEach(function(btn) {
+      btn.classList.remove('active');
+      if (activeAuthor && btn.dataset.author === activeAuthor) {
+        btn.classList.add('active');
+      }
+    });
+  }
+
+  function applyFilter() {
+    loadedCount = 0;
+    container.innerHTML = '';
+    filteredTweets = allTweets.filter(function(t) {
+      var screenName = t.user && t.user.screenName;
+      if (activeAuthor && screenName !== activeAuthor) return false;
+      if (searchQuery) {
+        var text = (t.text || '') + ' ' + (t.user && t.user.name || '') + ' ' + (screenName || '');
+        if (t.article) text += ' ' + (t.article.title || '') + ' ' + (t.article.previewText || '');
+        if (text.toLowerCase().indexOf(searchQuery.toLowerCase()) === -1) return false;
+      }
+      return true;
+    });
+    loadMore();
+  }
+
+  // Scroll handler
+  window.addEventListener('scroll', function() {
+    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 1000) {
+      loadMore();
+    }
+  });
+
+  // Search handler
+  var debounce;
+  searchInput.addEventListener('input', function() {
+    clearTimeout(debounce);
+    debounce = setTimeout(function() {
+      searchQuery = searchInput.value.trim();
+      applyFilter();
+      updateClearButton();
+    }, 200);
+  });
+
+  // Load data (injected by server)
+  statusEl.textContent = 'Loading tweets...';
+  allTweets = window.TWEET_DATA || [];
+  filteredTweets = allTweets;
+  buildFilterUI();
+  applyFilter();
+})();
+")
+
 (defn html-page
   "Wrap content in a full HTML page structure."
-  [title content & {:keys [css-path]}]
+  [title content & {:keys [css-path script]}]
   (str
    "<!DOCTYPE html>\n"
    (h/html
@@ -46,7 +341,7 @@
         [:link {:rel "stylesheet" :href css-path}])]
      [:body
       content
-      [:script (raw-string page-script)]]])))
+      [:script (raw-string (or script simple-page-script))]]])))
 
 (defn linkify-text
   "Convert URLs, mentions, and hashtags in text to links."
@@ -96,46 +391,53 @@
 ;; Article rendering
 
 (defn render-article-block
-  "Render a single article content block."
-  [block media-map media-prefix]
+  "Render a single article content block.
+   entity-to-media-map: maps entity range key to media_id
+   local-images: maps media_id to local filename
+   media-prefix: path prefix for article images"
+  [block entity-to-media-map local-images media-prefix]
   (let [block-type (:type block)
         text (:text block)]
     (case block-type
       "header-two" [:h2 text]
       "atomic" (when-let [entity-range (first (:entityRanges block))]
-                 (when-let [media-id (get media-map (:key entity-range))]
-                   [:figure.article-figure
-                    [:img {:src (str media-prefix "article-" media-id ".jpg")
-                           :alt ""
-                           :loading "lazy"}]]))
+                 (let [entity-key (:key entity-range)
+                       media-id (get entity-to-media-map entity-key)
+                       local-file (get local-images media-id)]
+                   (when local-file
+                     [:figure.article-figure
+                      [:img {:src (str media-prefix local-file)
+                             :alt ""
+                             :loading "lazy"}]])))
       ;; Default: paragraph
       (when (and text (not (str/blank? text)))
         [:p (raw-string (linkify-text text))]))))
 
-(defn build-media-map
-  "Build a map from entity keys to media IDs."
-  [content]
-  (let [entity-map (get-in content [:entityMap] [])]
-    (->> entity-map
-         (map (fn [entity]
-                (let [key (:key entity)
-                      media-items (get-in entity [:value :data :mediaItems] [])]
-                  (when-let [media-id (:mediaId (first media-items))]
-                    [key media-id]))))
-         (filter some?)
-         (into {}))))
+(defn build-entity-to-media-map
+  "Build a map from entity key to media_id.
+   entity-map is a vector where each entry has :key and :value.data.mediaItems[0].mediaId
+   The :key field is what content blocks reference in their entityRanges."
+  [entity-map]
+  (->> entity-map
+       (map (fn [entity]
+              (let [k (:key entity)
+                    media-id (get-in entity [:value :data :mediaItems 0 :mediaId])]
+                (when (and k media-id)
+                  ;; Key can be string or int in entityRanges, normalize to string
+                  [(if (string? k) (Integer/parseInt k) k) media-id]))))
+       (filter some?)
+       (into {})))
 
 (defn render-article-content
   "Render article content blocks to HTML."
   [article media-prefix]
   (let [blocks (:content-blocks article)
-        media-map (build-media-map {:entityMap (mapv (fn [i e] (assoc e :key i))
-                                                     (range)
-                                                     (get-in article [:content-blocks] []))})]
-    ;; Build media map from the raw content if available
+        entity-map (:entity-map article)
+        entity-to-media-map (build-entity-to-media-map entity-map)
+        local-images (:local-images article)]
     [:div.article-content
      (for [block blocks]
-       (render-article-block block {} media-prefix))]))
+       (render-article-block block entity-to-media-map local-images media-prefix))]))
 
 (defn render-article-card
   "Render an article preview card."
@@ -152,6 +454,20 @@
         (when-let [preview (:preview-text article)]
           [:p.article-preview (util/truncate preview 150)])]])))
 
+(defn build-local-images-map
+  "Build a map from media_id to local filename based on naming convention.
+   Used when :local-images isn't populated (e.g., when --skip-media was used)."
+  [tweet-id media-entities]
+  (->> media-entities
+       (map (fn [entity]
+              (let [media-id (:media_id entity)
+                    img-url (get-in entity [:media_info :original_img_url])]
+                (when (and media-id img-url)
+                  (let [ext (or (util/media-extension img-url) "jpg")]
+                    [media-id (str tweet-id "-" media-id "." ext)])))))
+       (filter some?)
+       (into {})))
+
 (defn generate-article-page
   "Generate a standalone HTML page for an article."
   [tweet output-dir]
@@ -159,6 +475,10 @@
     (let [tweet-id (:tweet-id tweet)
           user (:user tweet)
           title (:title article)
+          entity-to-media-map (build-entity-to-media-map (:entity-map article))
+          ;; Use :local-images if available, otherwise construct from media-entities
+          local-images (or (:local-images article)
+                           (build-local-images-map tweet-id (:media-entities article)))
           content [:main.article-page
                    [:nav.breadcrumb
                     [:a {:href "../index.html"} "← Back to all tweets"]]
@@ -176,7 +496,7 @@
                               :alt ""}]])
                     [:div.article-body
                      (for [block (:content-blocks article)]
-                       (render-article-block block {} "../articles/"))]]]
+                       (render-article-block block entity-to-media-map local-images "../articles/"))]]]
           html (html-page title content :css-path "../style.css")
           file-path (str output-dir "/articles/" tweet-id ".html")]
       (util/ensure-directory (str output-dir "/articles"))
@@ -248,21 +568,68 @@
     (spit file-path html)
     file-path))
 
+(defn tweet->json-data
+  "Convert a tweet to JSON-serializable format for the web app."
+  [tweet]
+  {:tweetId (:tweet-id tweet)
+   :text (:text tweet)
+   :createdAt (:created-at tweet)
+   :user {:name (get-in tweet [:user :name])
+          :screenName (get-in tweet [:user :screen-name])
+          :profileImage (get-in tweet [:user :profile-image])}
+   :media (when-let [media (:media tweet)]
+            (mapv (fn [m]
+                    {:type (name (:type m))
+                     :url (:url m)
+                     :localPath (:local-path m)
+                     :poster (:poster m)})
+                  media))
+   :article (when-let [article (:article tweet)]
+              {:title (:title article)
+               :previewText (:preview-text article)
+               :coverImage (:cover-image article)})
+   :quote (when-let [quote-tweet (:quote tweet)]
+            {:tweetId (:tweet-id quote-tweet)
+             :text (:text quote-tweet)
+             :user {:name (get-in quote-tweet [:user :name])
+                    :screenName (get-in quote-tweet [:user :screen-name])
+                    :profileImage (get-in quote-tweet [:user :profile-image])}
+             :article (when-let [article (:article quote-tweet)]
+                        {:title (:title article)
+                         :previewText (:preview-text article)
+                         :coverImage (:cover-image article)})})})
+
+(defn generate-tweets-json
+  "Generate tweets.json file with all tweet data."
+  [tweets output-dir]
+  (let [sorted-tweets (sort-by :created-at #(compare %2 %1) tweets)
+        json-data (mapv tweet->json-data sorted-tweets)
+        file-path (str output-dir "/tweets.json")]
+    (spit file-path (json/generate-string json-data))
+    (util/log-info "Generated tweets.json with" (count json-data) "tweets")
+    file-path))
+
 (defn generate-index-page
-  "Generate the main index page with all tweets."
+  "Generate the main index page with embedded tweet data."
   [tweets output-dir & {:keys [title] :or {title "Twitter Likes Archive"}}]
   (let [sorted-tweets (sort-by :created-at #(compare %2 %1) tweets)
+        json-data (mapv tweet->json-data sorted-tweets)
+        data-script (str "window.TWEET_DATA = " (json/generate-string json-data) ";")
         content [:div
                  [:header.page-header
-                  [:h1 title]
-                  [:p.tweet-count (str (count tweets) " liked tweets")]
-                  [:div.controls
-                   [:button#theme-toggle {:type "button"} "Toggle Dark Mode"]]]
-                 [:main.tweet-list
-                  (map #(render-tweet-card % :link-to-page true) sorted-tweets)]
+                  [:div.header-top
+                   [:h1 title]
+                   [:button#theme-toggle {:type "button"} "Toggle Dark Mode"]]
+                  [:div.header-controls
+                   [:input#search {:type "text" :placeholder "Search tweets..." :autocomplete "off"}]
+                   [:button#clear-filters.clear-btn {:style "display:none"} "Clear filters"]]
+                  [:div#filters.filters-panel]
+                  [:p#status.tweet-count "Loading..."]]
+                 [:main#tweet-list.tweet-list]
                  [:footer.page-footer
                   [:p "Generated by Twitter Likes Archiver"]]]
-        html (html-page title content :css-path "style.css")
+        full-script (str data-script "\n" index-app-script)
+        html (html-page title content :css-path "style.css" :script full-script)
         file-path (str output-dir "/index.html")]
     (spit file-path html)
     file-path))
@@ -282,9 +649,16 @@
       (generate-tweet-page tweet output-dir)
       ;; Generate article page if present
       (when (:article tweet)
-        (generate-article-page tweet output-dir))))
+        (generate-article-page tweet output-dir))
+      ;; Generate article page for quoted tweet if present
+      (when-let [quote-tweet (:quote tweet)]
+        (when (:article quote-tweet)
+          (generate-article-page quote-tweet output-dir)))))
 
-  ;; Generate index page
+  ;; Generate tweets.json for the web app
+  (generate-tweets-json tweets output-dir)
+
+  ;; Generate index page (shell that loads tweets.json)
   (generate-index-page tweets output-dir)
 
   (let [article-count (count (filter :article tweets))]
