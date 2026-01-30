@@ -348,6 +348,11 @@
   [text]
   (when text
     (-> text
+        (str/replace "&" "&amp;")
+        (str/replace "<" "&lt;")
+        (str/replace ">" "&gt;")
+        (str/replace "\"" "&quot;")
+        (str/replace "'" "&#39;")
         ;; URLs
         (str/replace #"(https?://[^\s]+)"
                      "<a href=\"$1\" target=\"_blank\" rel=\"noopener\">$1</a>")

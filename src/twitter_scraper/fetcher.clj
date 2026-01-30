@@ -61,16 +61,18 @@
                                                 (filter #(= "video/mp4" (:content_type %)))
                                                 (sort-by :bitrate >)
                                                 first)]
-                                  {:type :video
-                                   :url (:url best)
-                                   :poster (:media_url_https media)})
+                                  (when best
+                                    {:type :video
+                                     :url (:url best)
+                                     :poster (:media_url_https media)}))
                          :animated_gif (let [variants (get-in media [:video_info :variants] [])
                                              gif-url (-> variants first :url)]
-                                         {:type :gif
-                                          :url gif-url
-                                          :poster (:media_url_https media)})
+                                         (when gif-url
+                                           {:type :gif
+                                            :url gif-url
+                                            :poster (:media_url_https media)}))
                          nil))))
-              (filter some?)))]
+              (filter #(and (some? %) (some? (:url %))))))]
     ;; Deduplicate by URL (keep first occurrence)
     (->> all-media
          (reduce (fn [[seen result] media]
