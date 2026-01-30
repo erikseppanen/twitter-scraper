@@ -143,7 +143,7 @@
                     (fetcher/download-all-media
                      media-dir
                      {:on-progress #(print-progress "Media" %1 %2 %3)})
-                    (fetcher/download-all-article-covers articles-dir))))]
+                    (fetcher/download-all-article-media articles-dir))))]
 
         (util/log-info "")
 

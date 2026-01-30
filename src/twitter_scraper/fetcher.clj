@@ -94,8 +94,33 @@
     (catch Exception _
       nil)))
 
+(defn extract-article-from-response
+  "Extract article data from a tweet response."
+  [tweet-data]
+  (when-let [article (:article tweet-data)]
+    {:article-id (:id article)
+     :title (:title article)
+     :preview-text (:preview_text article)
+     :cover-image (get-in article [:cover_media :media_info :original_img_url])
+     :created-at (:created_at article)
+     :content-blocks (get-in article [:content :blocks] [])
+     :entity-map (get-in article [:content :entityMap] [])
+     :media-entities (:media_entities article)}))
+
+(defn extract-quote-from-response
+  "Extract quote tweet data from a tweet response."
+  [tweet-data]
+  (when-let [quote-tweet (:quote tweet-data)]
+    {:tweet-id (:id quote-tweet)
+     :text (:text quote-tweet)
+     :created-at (:created_at quote-tweet)
+     :user {:name (get-in quote-tweet [:author :name])
+            :screen-name (get-in quote-tweet [:author :screen_name])
+            :profile-image (get-in quote-tweet [:author :avatar_url])}
+     :article (extract-article-from-response quote-tweet)}))
+
 (defn fetch-article-data
-  "Fetch article data from fxtwitter API."
+  "Fetch article and quote data from fxtwitter API."
   [tweet-id]
   (try
     (let [response (http/get (str fxtwitter-url "/" tweet-id)
@@ -103,16 +128,11 @@
                              :as :json
                              :throw-exceptions false})]
       (when (= 200 (:status response))
-        (when-let [article (get-in response [:body :tweet :article])]
-          {:article-id (:id article)
-           :title (:title article)
-           :preview-text (:preview_text article)
-           :cover-image (get-in article [:cover_media :media_info :original_img_url])
-           :created-at (:created_at article)
-           :content-blocks (get-in article [:content :blocks] [])
-           :media-entities (:media_entities article)})))
+        (let [tweet-data (get-in response [:body :tweet])]
+          {:article (extract-article-from-response tweet-data)
+           :quote (extract-quote-from-response tweet-data)})))
     (catch Exception e
-      (util/log-warn "Failed to fetch article for tweet" tweet-id "-" (.getMessage e))
+      (util/log-warn "Failed to fetch article/quote for tweet" tweet-id "-" (.getMessage e))
       nil)))
 
 (defn fetch-tweet-data
@@ -134,11 +154,12 @@
                   full-text (if is-long-tweet?
                               (fetch-full-text tweet-id)
                               nil)
-                  ;; Check for article link
+                  ;; Check for article link or quote tweet
                   article-id (extract-article-id body)
-                  ;; Fetch article data if present
-                  article (when article-id
-                            (fetch-article-data tweet-id))]
+                  has-quote? (some? (:quoted_tweet body))
+                  ;; Fetch article/quote data if needed
+                  extra-data (when (or article-id has-quote?)
+                               (fetch-article-data tweet-id))]
               (when body
                 (cond-> {:tweet-id tweet-id
                          :text (or full-text (:text body))
@@ -150,7 +171,8 @@
                          :metrics {:likes (get-in body [:favorite_count] 0)
                                    :retweets (get-in body [:conversation_count] 0)}
                          :raw body}
-                  article (assoc :article article))))
+                  (:article extra-data) (assoc :article (:article extra-data))
+                  (:quote extra-data) (assoc :quote (:quote extra-data)))))
         404 (do (util/log-warn "Tweet not found:" tweet-id)
                 nil)
         (do (util/log-warn "Failed to fetch tweet" tweet-id "- Status:" (:status response))
@@ -259,6 +281,37 @@
       tweet)
     tweet))
 
+(defn download-article-images
+  "Download all inline images from an article.
+   Returns updated tweet with local image paths mapped by media_id."
+  [tweet articles-dir]
+  (if-let [article (:article tweet)]
+    (if-let [media-entities (:media-entities article)]
+      (let [tweet-id (:tweet-id tweet)
+            downloaded-media
+            (->> media-entities
+                 (map (fn [entity]
+                        (let [media-id (:media_id entity)
+                              img-url (get-in entity [:media_info :original_img_url])]
+                          (when (and media-id img-url)
+                            (let [ext (or (util/media-extension img-url) "jpg")
+                                  filename (str tweet-id "-" media-id "." ext)
+                                  dest-path (str articles-dir "/" filename)]
+                              (if (util/file-exists? dest-path)
+                                (do
+                                  (util/log-info "Skipping existing article image:" filename)
+                                  [media-id filename])
+                                (if (download-file img-url dest-path)
+                                  (do
+                                    (util/log-info "Downloaded article image:" filename)
+                                    [media-id filename])
+                                  nil)))))))
+                 (filter some?)
+                 (into {}))]
+        (assoc-in tweet [:article :local-images] downloaded-media))
+      tweet)
+    tweet))
+
 (defn download-all-media
   "Download media for all tweets.
    Returns tweets with updated local paths."
@@ -272,12 +325,42 @@
             (download-media tweet media-dir)))
          vec)))
 
-(defn download-all-article-covers
-  "Download article cover images for tweets with articles.
+(defn download-quote-article-cover
+  "Download article cover image for a quoted tweet.
+   Returns updated tweet with local cover path in quote."
+  [tweet articles-dir]
+  (if-let [quote-tweet (:quote tweet)]
+    (if-let [article (:article quote-tweet)]
+      (if-let [cover-url (:cover-image article)]
+        (let [quote-tweet-id (:tweet-id quote-tweet)
+              filename (str quote-tweet-id "-cover.jpg")
+              dest-path (str articles-dir "/" filename)]
+          (if (util/file-exists? dest-path)
+            (do
+              (util/log-info "Skipping existing quote article cover:" filename)
+              (assoc-in tweet [:quote :article :local-cover] filename))
+            (if (download-file cover-url dest-path)
+              (do
+                (util/log-info "Downloaded quote article cover:" filename)
+                (assoc-in tweet [:quote :article :local-cover] filename))
+              tweet)))
+        tweet)
+      tweet)
+    tweet))
+
+(defn download-all-article-media
+  "Download article cover images and inline images for tweets with articles.
+   Also downloads cover images for quoted tweet articles.
    Returns tweets with updated local paths."
   [tweets articles-dir]
   (util/ensure-directory articles-dir)
-  (let [tweets-with-articles (filter :article tweets)]
+  (let [tweets-with-articles (filter :article tweets)
+        tweets-with-quote-articles (filter #(get-in % [:quote :article]) tweets)]
     (when (seq tweets-with-articles)
-      (util/log-info "Downloading" (count tweets-with-articles) "article covers..."))
-    (mapv #(download-article-cover % articles-dir) tweets)))
+      (util/log-info "Downloading media for" (count tweets-with-articles) "articles..."))
+    (when (seq tweets-with-quote-articles)
+      (util/log-info "Downloading media for" (count tweets-with-quote-articles) "quoted articles..."))
+    (->> tweets
+         (mapv #(download-article-cover % articles-dir))
+         (mapv #(download-article-images % articles-dir))
+         (mapv #(download-quote-article-cover % articles-dir)))))
