@@ -19,6 +19,7 @@
     :parse-fn #(Integer/parseInt %)]
    ["-s" "--skip-fetch" "Skip fetching tweet data (use cached data)"]
    ["-m" "--skip-media" "Skip downloading media files"]
+   ["-I" "--import FILE" "Import tweet IDs from file (one per line) and merge with existing archive"]
    ["-h" "--help" "Show this help"]])
 
 (defn usage [options-summary]
@@ -51,6 +52,10 @@
 
       errors
       {:exit-message (error-msg errors) :ok? false}
+
+      ;; Import mode doesn't require --input
+      (:import options)
+      {:options options}
 
       (nil? (:input options))
       {:exit-message "Error: --input is required\n\n(usage summary)" :ok? false}
@@ -159,6 +164,97 @@
         (util/log-info "=== Archive Complete ===")
         (util/log-info "Open" (str output "/index.html") "in your browser")))))
 
+(defn parse-tweet-ids-file
+  "Parse tweet IDs from a file (one per line, supports URLs too)."
+  [file-path]
+  (->> (slurp file-path)
+       str/split-lines
+       (map str/trim)
+       (filter seq)
+       (map (fn [line]
+              ;; Extract ID from URL or use as-is
+              (if-let [match (re-find #"/status/(\d+)" line)]
+                (second match)
+                (re-find #"^\d+$" line))))
+       (filter some?)
+       vec))
+
+(defn run-import
+  "Import tweets from a file of IDs and merge with existing archive."
+  [{:keys [output delay skip-media import]}]
+  (util/log-info "Starting Twitter Import")
+  (util/log-info "Import file:" import)
+  (util/log-info "Output:" output)
+
+  ;; Parse tweet IDs from file
+  (let [new-ids (parse-tweet-ids-file import)]
+    (util/log-info "Found" (count new-ids) "tweet IDs in import file")
+
+    (when (empty? new-ids)
+      (util/log-error "No valid tweet IDs found in import file")
+      (System/exit 1))
+
+    ;; Load existing cache
+    (let [existing-tweets (or (load-cache output) [])
+          existing-ids (set (map :tweet-id existing-tweets))
+          ids-to-fetch (filterv #(not (existing-ids %)) new-ids)]
+
+      (util/log-info "Existing tweets in cache:" (count existing-tweets))
+      (util/log-info "New tweets to fetch:" (count ids-to-fetch))
+
+      (if (empty? ids-to-fetch)
+        (util/log-info "All tweets already in cache, nothing to import")
+        (do
+          ;; Ensure output directories exist
+          (util/ensure-directory output)
+          (util/ensure-directory (str output "/media"))
+          (util/ensure-directory (str output "/tweets"))
+
+          ;; Fetch new tweets
+          (util/log-info "")
+          (util/log-info "=== Fetching New Tweets ===")
+          (let [fetched (fetcher/fetch-tweets-batch
+                         ids-to-fetch
+                         {:delay-ms delay
+                          :on-progress #(print-progress "Fetching" %1 %2 %3)})
+                new-tweets (vals fetched)
+                all-tweets (concat existing-tweets new-tweets)]
+
+            (util/log-info "")
+            (util/log-info "Fetched" (count new-tweets) "new tweets")
+            (save-cache all-tweets output)
+
+            ;; Download media for new tweets
+            (util/log-info "")
+            (util/log-info "=== Downloading Media ===")
+            (let [tweets-with-media
+                  (if skip-media
+                    (do (util/log-info "Skipping media download")
+                        all-tweets)
+                    (let [media-dir (str output "/media")
+                          articles-dir (str output "/articles")]
+                      ;; Only download media for new tweets, then merge
+                      (let [new-with-media (-> new-tweets
+                                               (fetcher/download-all-media
+                                                media-dir
+                                                {:on-progress #(print-progress "Media" %1 %2 %3)})
+                                               (fetcher/download-all-article-media articles-dir))]
+                        (concat existing-tweets new-with-media))))]
+
+              ;; Regenerate HTML for all tweets
+              (util/log-info "")
+              (util/log-info "=== Regenerating HTML Pages ===")
+              (html/copy-css output)
+              (html/generate-all-pages
+               tweets-with-media
+               output
+               {:on-progress #(print-progress "HTML" %1 %2 %3)})
+
+              (util/log-info "")
+              (util/log-info "=== Import Complete ===")
+              (util/log-info "Total tweets in archive:" (count tweets-with-media))
+              (util/log-info "Open" (str output "/index.html") "in your browser"))))))))
+
 (defn -main [& args]
   (let [{:keys [options exit-message ok?]} (validate-args args)]
     (if exit-message
@@ -166,7 +262,9 @@
         (println exit-message)
         (System/exit (if ok? 0 1)))
       (try
-        (run-archive options)
+        (if (:import options)
+          (run-import options)
+          (run-archive options))
         (catch Exception e
           (util/log-error "Fatal error:" (.getMessage e))
           (.printStackTrace e)
