@@ -1,6 +1,7 @@
 (ns twitter-scraper.core
   (:require [clojure.tools.cli :refer [parse-opts]]
             [clojure.string :as str]
+            [clojure.edn :as edn]
             [twitter-scraper.parser :as parser]
             [twitter-scraper.fetcher :as fetcher]
             [twitter-scraper.html :as html]
@@ -58,7 +59,7 @@
       {:options options}
 
       (nil? (:input options))
-      {:exit-message "Error: --input is required\n\n(usage summary)" :ok? false}
+      {:exit-message (str "Error: --input is required\n\n" (usage summary)) :ok? false}
 
       :else
       {:options options})))
@@ -83,7 +84,7 @@
   (let [cache-file (str output-dir "/.tweet-cache.edn")]
     (when (util/file-exists? cache-file)
       (util/log-info "Loading cached tweet data...")
-      (read-string (slurp cache-file)))))
+      (edn/read-string (slurp cache-file)))))
 
 (defn run-archive
   "Main archiving pipeline."
