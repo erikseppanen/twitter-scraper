@@ -54,6 +54,7 @@ Open `./archive/index.html` in your browser.
 | `-l, --limit N` | Limit to first N tweets | (all) |
 | `-s, --skip-fetch` | Skip fetching (use cached data) | |
 | `-m, --skip-media` | Skip downloading media files | |
+| `-I, --import FILE` | Import tweet IDs from file | |
 | `-h, --help` | Show help | |
 
 ## Examples
@@ -85,6 +86,83 @@ src/twitter_scraper/
 resources/templates/
 └── style.css     # Styling for generated HTML
 ```
+
+## Data Flow
+
+```
++---------------------+
+| Twitter Data Export |
+| (from Settings)     |
+|                     |
+| data/like.js        |<-- Contains only tweet IDs, not content
++---------+-----------+
+          |
+          | --input
+          v
++------------------------------------------------------------------+
+|                        twitter-scraper                           |
+|                                                                  |
+|  +-----------+    +-----------+    +-----------+    +----------+ |
+|  | parser    |--->| fetcher   |--->| fetcher   |--->| html     | |
+|  |           |    |           |    |           |    |          | |
+|  | Extract   |    | Fetch     |    | Download  |    | Generate | |
+|  | tweet IDs |    | tweet data|    | media     |    | HTML     | |
+|  +-----------+    | from API  |    | files     |    | pages    | |
+|                   +-----+-----+    +-----+-----+    +----+-----+ |
++-------------------------|--------------|--------------|----------+
+                          |              |              |
+                          v              v              v
+                    +---------------------------------------------+
+                    |                 ./archive/                  |
+                    |                                             |
+                    |  .tweet-cache.edn  <-- Tweet metadata cache |
+                    |                       (text, authors, dates,|
+                    |                        media URLs, articles)|
+                    |                       BACK UP THIS FILE!    |
+                    |                                             |
+                    |  media/            <-- Downloaded images    |
+                    |  articles/         <-- Article covers       |
+                    |  tweets/           <-- Individual pages     |
+                    |  index.html        <-- Main browsable page  |
+                    |                                             |
+                    +---------------------------------------------+
+```
+
+**Important:** The cache file (`.tweet-cache.edn`) stores all fetched tweet data. The Twitter export only contains tweet IDs, not content. Without the cache, content must be re-fetched from the API.
+
+## Incremental Updates
+
+After your initial archive, you can add new liked tweets without requesting another Twitter data export.
+
+### Option 1: Manual collection
+
+As you browse Twitter and like tweets, copy their URLs to a text file:
+
+```bash
+# new-tweets.txt (one per line)
+https://x.com/user/status/1234567890123456789
+https://x.com/other/status/9876543210987654321
+```
+
+Then import:
+
+```bash
+clj -M -m twitter-scraper.core -I new-tweets.txt --output ./archive
+```
+
+### Option 2: Browser scraping with Claude
+
+Ask Claude: "Scrape my new liked tweets and update my archive"
+
+Claude will open a browser for you to log in, then scrape your likes page and import new tweets automatically.
+
+### Import file format
+
+The import file accepts one entry per line:
+- Tweet IDs: `1234567890123456789`
+- Tweet URLs: `https://x.com/username/status/1234567890123456789`
+
+The tool automatically skips tweets already in your archive.
 
 ## License
 
