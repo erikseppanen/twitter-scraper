@@ -105,7 +105,7 @@
       previewHtml = highlightText(previewHtml, query);
     }
     var preview = previewHtml ? '<p class=\"article-preview\">' + previewHtml + '</p>' : '';
-    return '<a class=\"article-card\" href=\"articles/' + tweetId + '.html\">' + cover + '<div class=\"article-info\"><h3 class=\"article-title\">' + titleHtml + '</h3>' + preview + '</div></a>';
+    return '<a class=\"article-card\" href=\"articles/' + tweetId + '.html\" target=\"_blank\" rel=\"noopener\">' + cover + '<div class=\"article-info\"><h3 class=\"article-title\">' + titleHtml + '</h3>' + preview + '</div></a>';
   }
 
   function renderQuote(quote, query) {
@@ -128,7 +128,7 @@
       articleHtml = '<div class=\"quote-article\">' + cover + '<div class=\"quote-article-info\"><div class=\"quote-article-title\">' + title + '</div><div class=\"quote-article-preview\">' + preview + '</div></div></div>';
     }
 
-    return '<a class=\"quote-card\" href=\"' + quoteLink + '\"' + (quote.article ? '' : ' target=\"_blank\" rel=\"noopener\"') + '>' +
+    return '<a class=\"quote-card\" href=\"' + quoteLink + '\" target=\"_blank\" rel=\"noopener\">' +
       '<div class=\"quote-header\"><span class=\"quote-name\">' + displayName + '</span> <span class=\"quote-username\">@' + escapeHtml(screenName) + '</span></div>' +
       (textHtml ? '<div class=\"quote-text\">' + textHtml + '</div>' : '') +
       articleHtml +
@@ -352,7 +352,6 @@
         (str/replace "<" "&lt;")
         (str/replace ">" "&gt;")
         (str/replace "\"" "&quot;")
-        (str/replace "'" "&#39;")
         ;; URLs
         (str/replace #"(https?://[^\s]+)"
                      "<a href=\"$1\" target=\"_blank\" rel=\"noopener\">$1</a>")
@@ -450,7 +449,9 @@
   (when article
     (let [cover-image (:cover-image article)
           local-cover (str articles-prefix tweet-id "-cover.jpg")]
-      [:a.article-card {:href (str articles-prefix tweet-id ".html")}
+      [:a.article-card {:href (str articles-prefix tweet-id ".html")
+                        :target "_blank"
+                        :rel "noopener"}
        (when cover-image
          [:div.article-cover
           [:img {:src local-cover :alt "" :loading "lazy"}]])
