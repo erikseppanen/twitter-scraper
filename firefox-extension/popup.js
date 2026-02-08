@@ -1,6 +1,7 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
 
 const statusEl = document.getElementById("status");
+const baselineEl = document.getElementById("baseline-display");
 const exportBtn = document.getElementById("export");
 const stopBtn = document.getElementById("stop");
 const baselineBtn = document.getElementById("baseline");
@@ -8,6 +9,10 @@ const resetBtn = document.getElementById("reset");
 
 function setStatus(text) {
   statusEl.textContent = text;
+}
+
+function setBaselineDisplay(id) {
+  baselineEl.textContent = id ? `Baseline: ${id}` : "Baseline: not set";
 }
 
 async function sendToActiveTab(message) {
@@ -49,10 +54,18 @@ baselineBtn.addEventListener("click", async () => {
     setStatus(response && response.error ? response.error : "Baseline failed.");
     return;
   }
+  if (response.lastSeenId) {
+    setBaselineDisplay(response.lastSeenId);
+  }
   setStatus("Baseline set. Next export will include only new likes.");
 });
 
 resetBtn.addEventListener("click", async () => {
   await api.runtime.sendMessage({ type: "RESET_LAST_SEEN" });
   setStatus("Last seen cleared.");
+  setBaselineDisplay(null);
+});
+
+api.storage.local.get("lastSeenId").then((data) => {
+  setBaselineDisplay(data.lastSeenId || null);
 });
