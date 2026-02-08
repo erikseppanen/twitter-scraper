@@ -35,6 +35,24 @@ function sleep(ms) {
 }
 
 let cancelExport = false;
+let pickBaselineMode = false;
+
+function findTweetIdFromElement(target) {
+  const article = target.closest && target.closest('article[data-testid="tweet"]');
+  if (!article) return null;
+  const link = article.querySelector('a[href*="/status/"]');
+  if (!link) return null;
+  const match = link.getAttribute("href").match(/\/status\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+function enablePickBaselineMode() {
+  pickBaselineMode = true;
+}
+
+function disablePickBaselineMode() {
+  pickBaselineMode = false;
+}
 
 async function collectNewLikes() {
   if (!isLikesPage()) {
@@ -130,4 +148,28 @@ api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     setBaseline().then(sendResponse);
     return true;
   }
+  if (message.type === "PICK_BASELINE") {
+    if (!isLikesPage()) {
+      sendResponse({ ok: false, error: "Open your Likes page on x.com first." });
+      return;
+    }
+    enablePickBaselineMode();
+    sendResponse({ ok: true });
+    return;
+  }
 });
+
+document.addEventListener(
+  "click",
+  async (event) => {
+    if (!pickBaselineMode) return;
+    const id = findTweetIdFromElement(event.target);
+    if (!id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    disablePickBaselineMode();
+    await api.storage.local.set({ lastSeenId: id });
+    api.runtime.sendMessage({ type: "BASELINE_PICKED", lastSeenId: id });
+  },
+  true
+);

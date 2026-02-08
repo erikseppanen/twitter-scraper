@@ -87,6 +87,7 @@ There is a simple Firefox extension to export newly liked tweet IDs to a text fi
 
 1. Open your Likes page on `x.com` (or `twitter.com`)
 2. Click the extension button → **Set current as baseline** (first time only)
+   - Or choose **Pick baseline by click** and click the tweet you want as the cutoff
 3. Click **Export new likes**
 4. A `.txt` file downloads with one tweet ID per line
 
