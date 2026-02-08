@@ -46,13 +46,41 @@ function sleep(ms) {
 
 let cancelExport = false;
 let pickBaselineMode = false;
+let pickOverlay = null;
 
 function enablePickBaselineMode() {
   pickBaselineMode = true;
+  showPickOverlay();
 }
 
 function disablePickBaselineMode() {
   pickBaselineMode = false;
+  removePickOverlay();
+}
+
+function showPickOverlay() {
+  if (pickOverlay) return;
+  pickOverlay = document.createElement("div");
+  pickOverlay.id = "likes-exporter-pick-overlay";
+  pickOverlay.style.position = "fixed";
+  pickOverlay.style.top = "12px";
+  pickOverlay.style.left = "12px";
+  pickOverlay.style.zIndex = "2147483647";
+  pickOverlay.style.background = "rgba(20,20,20,0.9)";
+  pickOverlay.style.color = "#fff";
+  pickOverlay.style.padding = "10px 12px";
+  pickOverlay.style.borderRadius = "8px";
+  pickOverlay.style.fontSize = "13px";
+  pickOverlay.style.fontFamily = "system-ui, -apple-system, Segoe UI, sans-serif";
+  pickOverlay.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)";
+  pickOverlay.textContent = "Pick baseline: click the tweet you want as the cutoff. Press Esc to cancel.";
+  document.body.appendChild(pickOverlay);
+}
+
+function removePickOverlay() {
+  if (!pickOverlay) return;
+  pickOverlay.remove();
+  pickOverlay = null;
 }
 
 async function collectNewLikes() {
@@ -206,3 +234,10 @@ document.addEventListener(
   },
   true
 );
+
+document.addEventListener("keydown", (event) => {
+  if (!pickBaselineMode) return;
+  if (event.key === "Escape") {
+    disablePickBaselineMode();
+  }
+});
