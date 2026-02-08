@@ -2,6 +2,7 @@ const api = typeof browser !== "undefined" ? browser : chrome;
 
 const statusEl = document.getElementById("status");
 const baselineEl = document.getElementById("baseline-display");
+const baselineIdEl = document.getElementById("baseline-id");
 const exportBtn = document.getElementById("export");
 const stopBtn = document.getElementById("stop");
 const baselineBtn = document.getElementById("baseline");
@@ -14,6 +15,24 @@ function setStatus(text) {
 
 function setBaselineDisplay(id) {
   baselineEl.textContent = id ? `Baseline: ${id}` : "Baseline: not set";
+  baselineIdEl.textContent = "";
+}
+
+function truncateText(text, maxLen) {
+  if (!text) return "";
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, maxLen - 1)}…`;
+}
+
+function setBaselineDisplayMeta(meta) {
+  if (!meta || !meta.id) {
+    setBaselineDisplay(null);
+    return;
+  }
+  const author = meta.author ? `@${meta.author}` : "Unknown";
+  const text = truncateText(meta.text || "", 80);
+  baselineEl.textContent = `Baseline: ${author}${text ? " — " + text : ""}`;
+  baselineIdEl.textContent = `ID: ${meta.id}`;
 }
 
 async function sendToActiveTab(message) {
@@ -56,7 +75,11 @@ baselineBtn.addEventListener("click", async () => {
     return;
   }
   if (response.lastSeenId) {
-    setBaselineDisplay(response.lastSeenId);
+    setBaselineDisplayMeta({
+      id: response.lastSeenId,
+      author: response.lastSeenAuthor,
+      text: response.lastSeenText
+    });
   }
   setStatus("Baseline set. Next export will include only new likes.");
 });
@@ -76,14 +99,26 @@ resetBtn.addEventListener("click", async () => {
   setBaselineDisplay(null);
 });
 
-api.storage.local.get("lastSeenId").then((data) => {
-  setBaselineDisplay(data.lastSeenId || null);
+api.storage.local.get(["lastSeenId", "lastSeenAuthor", "lastSeenText"]).then((data) => {
+  if (data.lastSeenId) {
+    setBaselineDisplayMeta({
+      id: data.lastSeenId,
+      author: data.lastSeenAuthor,
+      text: data.lastSeenText
+    });
+    return;
+  }
+  setBaselineDisplay(null);
 });
 
 api.runtime.onMessage.addListener((message) => {
   if (!message || message.type !== "BASELINE_PICKED") return;
   if (message.lastSeenId) {
-    setBaselineDisplay(message.lastSeenId);
+    setBaselineDisplayMeta({
+      id: message.lastSeenId,
+      author: message.lastSeenAuthor,
+      text: message.lastSeenText
+    });
     setStatus("Baseline set from clicked tweet.");
   }
 });
