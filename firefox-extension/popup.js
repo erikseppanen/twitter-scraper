@@ -2,6 +2,8 @@ const api = typeof browser !== "undefined" ? browser : chrome;
 
 const statusEl = document.getElementById("status");
 const exportBtn = document.getElementById("export");
+const stopBtn = document.getElementById("stop");
+const baselineBtn = document.getElementById("baseline");
 const resetBtn = document.getElementById("reset");
 
 function setStatus(text) {
@@ -26,10 +28,28 @@ exportBtn.addEventListener("click", async () => {
     return;
   }
   if (response.count === 0) {
-    setStatus("No new likes found.");
+    setStatus(response.message || "No new likes found.");
     return;
   }
   setStatus(`Exported ${response.count} new likes.`);
+});
+
+stopBtn.addEventListener("click", async () => {
+  const response = await sendToActiveTab({ type: "CANCEL_EXPORT" });
+  if (!response || !response.ok) {
+    setStatus(response && response.error ? response.error : "Stop failed.");
+    return;
+  }
+  setStatus("Stopping export...");
+});
+
+baselineBtn.addEventListener("click", async () => {
+  const response = await sendToActiveTab({ type: "SET_BASELINE" });
+  if (!response || !response.ok) {
+    setStatus(response && response.error ? response.error : "Baseline failed.");
+    return;
+  }
+  setStatus("Baseline set. Next export will include only new likes.");
 });
 
 resetBtn.addEventListener("click", async () => {

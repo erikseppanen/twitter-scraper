@@ -20,6 +20,8 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let cancelExport = false;
+
 async function collectNewLikes() {
   if (!isLikesPage()) {
     return { ok: false, error: "Open your Likes page on x.com first." };
@@ -27,6 +29,13 @@ async function collectNewLikes() {
 
   const storage = await api.storage.local.get("lastSeenId");
   const lastSeenId = storage.lastSeenId || null;
+  if (!lastSeenId) {
+    return {
+      ok: true,
+      count: 0,
+      message: "No baseline set. Click 'Set current as baseline' first."
+    };
+  }
 
   const seen = new Set();
   const newIds = [];
@@ -34,6 +43,10 @@ async function collectNewLikes() {
   let noNewCount = 0;
 
   for (let i = 0; i < 200; i += 1) {
+    if (cancelExport) {
+      cancelExport = false;
+      return { ok: true, count: 0, message: "Export stopped." };
+    }
     const ids = extractIdsFromPage();
     let addedThisRound = 0;
 
@@ -76,8 +89,31 @@ async function collectNewLikes() {
   };
 }
 
+async function setBaseline() {
+  if (!isLikesPage()) {
+    return { ok: false, error: "Open your Likes page on x.com first." };
+  }
+  const ids = extractIdsFromPage();
+  if (!ids.length) {
+    return { ok: false, error: "No tweets found on the page yet." };
+  }
+  await api.storage.local.set({ lastSeenId: ids[0] });
+  return { ok: true, lastSeenId: ids[0] };
+}
+
 api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (!message || message.type !== "EXPORT_NEW_LIKES") return;
-  collectNewLikes().then(sendResponse);
-  return true;
+  if (!message) return;
+  if (message.type === "EXPORT_NEW_LIKES") {
+    collectNewLikes().then(sendResponse);
+    return true;
+  }
+  if (message.type === "CANCEL_EXPORT") {
+    cancelExport = true;
+    sendResponse({ ok: true });
+    return;
+  }
+  if (message.type === "SET_BASELINE") {
+    setBaseline().then(sendResponse);
+    return true;
+  }
 });
