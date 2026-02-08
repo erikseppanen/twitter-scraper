@@ -16,6 +16,20 @@ function extractIdsFromPage() {
   return ids;
 }
 
+function getFirstVisibleId() {
+  const articles = document.querySelectorAll('article[data-testid="tweet"]');
+  for (const article of articles) {
+    const rect = article.getBoundingClientRect();
+    const isVisible = rect.bottom > 0 && rect.top < window.innerHeight;
+    if (!isVisible) continue;
+    const link = article.querySelector('a[href*="/status/"]');
+    if (!link) continue;
+    const match = link.getAttribute("href").match(/\/status\/(\d+)/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -93,12 +107,12 @@ async function setBaseline() {
   if (!isLikesPage()) {
     return { ok: false, error: "Open your Likes page on x.com first." };
   }
-  const ids = extractIdsFromPage();
-  if (!ids.length) {
+  const id = getFirstVisibleId();
+  if (!id) {
     return { ok: false, error: "No tweets found on the page yet." };
   }
-  await api.storage.local.set({ lastSeenId: ids[0] });
-  return { ok: true, lastSeenId: ids[0] };
+  await api.storage.local.set({ lastSeenId: id });
+  return { ok: true, lastSeenId: id };
 }
 
 api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
