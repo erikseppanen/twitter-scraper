@@ -1,9 +1,7 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
 
 function buildFilename() {
-  const now = new Date();
-  const stamp = now.toISOString().slice(0, 10);
-  return `twitter-likes-${stamp}.txt`;
+  return "new-tweets-to-import.txt";
 }
 
 api.runtime.onMessage.addListener((message) => {
