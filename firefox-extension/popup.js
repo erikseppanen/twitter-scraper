@@ -5,6 +5,7 @@ const baselineEl = document.getElementById("baseline-display");
 const exportBtn = document.getElementById("export");
 const stopBtn = document.getElementById("stop");
 const baselineBtn = document.getElementById("baseline");
+const pickBaselineBtn = document.getElementById("pick-baseline");
 const resetBtn = document.getElementById("reset");
 
 function setStatus(text) {
@@ -60,6 +61,15 @@ baselineBtn.addEventListener("click", async () => {
   setStatus("Baseline set. Next export will include only new likes.");
 });
 
+pickBaselineBtn.addEventListener("click", async () => {
+  const response = await sendToActiveTab({ type: "PICK_BASELINE" });
+  if (!response || !response.ok) {
+    setStatus(response && response.error ? response.error : "Pick baseline failed.");
+    return;
+  }
+  setStatus("Click a tweet on the Likes page to set baseline.");
+});
+
 resetBtn.addEventListener("click", async () => {
   await api.runtime.sendMessage({ type: "RESET_LAST_SEEN" });
   setStatus("Last seen cleared.");
@@ -68,4 +78,12 @@ resetBtn.addEventListener("click", async () => {
 
 api.storage.local.get("lastSeenId").then((data) => {
   setBaselineDisplay(data.lastSeenId || null);
+});
+
+api.runtime.onMessage.addListener((message) => {
+  if (!message || message.type !== "BASELINE_PICKED") return;
+  if (message.lastSeenId) {
+    setBaselineDisplay(message.lastSeenId);
+    setStatus("Baseline set from clicked tweet.");
+  }
 });
