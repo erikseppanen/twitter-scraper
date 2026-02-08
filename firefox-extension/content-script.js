@@ -16,16 +16,26 @@ function extractIdsFromPage() {
   return ids;
 }
 
+function extractTweetMetaFromArticle(article) {
+  const link = article.querySelector('a[href*="/status/"]');
+  if (!link) return null;
+  const match = link.getAttribute("href").match(/^\/([^/]+)\/status\/(\d+)/);
+  if (!match) return null;
+  const author = match[1];
+  const id = match[2];
+  const textEl = article.querySelector('div[data-testid="tweetText"]');
+  const text = textEl ? textEl.innerText.trim() : "";
+  return { id, author, text };
+}
+
 function getFirstVisibleId() {
   const articles = document.querySelectorAll('article[data-testid="tweet"]');
   for (const article of articles) {
     const rect = article.getBoundingClientRect();
     const isVisible = rect.bottom > 0 && rect.top < window.innerHeight;
     if (!isVisible) continue;
-    const link = article.querySelector('a[href*="/status/"]');
-    if (!link) continue;
-    const match = link.getAttribute("href").match(/\/status\/(\d+)/);
-    if (match) return match[1];
+    const meta = extractTweetMetaFromArticle(article);
+    if (meta) return meta;
   }
   return null;
 }
@@ -36,15 +46,6 @@ function sleep(ms) {
 
 let cancelExport = false;
 let pickBaselineMode = false;
-
-function findTweetIdFromElement(target) {
-  const article = target.closest && target.closest('article[data-testid="tweet"]');
-  if (!article) return null;
-  const link = article.querySelector('a[href*="/status/"]');
-  if (!link) return null;
-  const match = link.getAttribute("href").match(/\/status\/(\d+)/);
-  return match ? match[1] : null;
-}
 
 function enablePickBaselineMode() {
   pickBaselineMode = true;
@@ -73,6 +74,7 @@ async function collectNewLikes() {
   const newIds = [];
   let foundLastSeen = false;
   let noNewCount = 0;
+  let newestMeta = null;
 
   for (let i = 0; i < 200; i += 1) {
     if (cancelExport) {
@@ -90,6 +92,12 @@ async function collectNewLikes() {
         break;
       }
       newIds.push(id);
+      if (!newestMeta) {
+        const article = document.querySelector(`a[href$="/status/${id}"]`)?.closest('article[data-testid="tweet"]');
+        if (article) {
+          newestMeta = extractTweetMetaFromArticle(article);
+        }
+      }
       addedThisRound += 1;
     }
 
@@ -109,7 +117,13 @@ async function collectNewLikes() {
 
   const newestId = newIds.length ? newIds[0] : null;
   if (newIds.length) {
-    await api.runtime.sendMessage({ type: "DOWNLOAD_IDS", ids: newIds, newestId });
+    await api.runtime.sendMessage({
+      type: "DOWNLOAD_IDS",
+      ids: newIds,
+      newestId,
+      newestAuthor: newestMeta ? newestMeta.author : null,
+      newestText: newestMeta ? newestMeta.text : null
+    });
   }
 
   return {
@@ -125,12 +139,21 @@ async function setBaseline() {
   if (!isLikesPage()) {
     return { ok: false, error: "Open your Likes page on x.com first." };
   }
-  const id = getFirstVisibleId();
-  if (!id) {
+  const meta = getFirstVisibleId();
+  if (!meta) {
     return { ok: false, error: "No tweets found on the page yet." };
   }
-  await api.storage.local.set({ lastSeenId: id });
-  return { ok: true, lastSeenId: id };
+  await api.storage.local.set({
+    lastSeenId: meta.id,
+    lastSeenAuthor: meta.author || null,
+    lastSeenText: meta.text || ""
+  });
+  return {
+    ok: true,
+    lastSeenId: meta.id,
+    lastSeenAuthor: meta.author || null,
+    lastSeenText: meta.text || ""
+  };
 }
 
 api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -163,13 +186,23 @@ document.addEventListener(
   "click",
   async (event) => {
     if (!pickBaselineMode) return;
-    const id = findTweetIdFromElement(event.target);
-    if (!id) return;
+    const article = event.target.closest('article[data-testid="tweet"]');
+    const meta = article ? extractTweetMetaFromArticle(article) : null;
+    if (!meta) return;
     event.preventDefault();
     event.stopPropagation();
     disablePickBaselineMode();
-    await api.storage.local.set({ lastSeenId: id });
-    api.runtime.sendMessage({ type: "BASELINE_PICKED", lastSeenId: id });
+    await api.storage.local.set({
+      lastSeenId: meta.id,
+      lastSeenAuthor: meta.author || null,
+      lastSeenText: meta.text || ""
+    });
+    api.runtime.sendMessage({
+      type: "BASELINE_PICKED",
+      lastSeenId: meta.id,
+      lastSeenAuthor: meta.author || null,
+      lastSeenText: meta.text || ""
+    });
   },
   true
 );
