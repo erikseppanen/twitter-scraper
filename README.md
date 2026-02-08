@@ -73,6 +73,28 @@ clj -M -m twitter-scraper.core --input ~/twitter-archive --skip-fetch
 clj -M -m twitter-scraper.core --input ~/twitter-archive --skip-fetch --skip-media
 ```
 
+## Firefox Extension (export new likes)
+
+There is a simple Firefox extension to export newly liked tweet IDs to a text file.
+
+### Install
+
+1. Open Firefox and go to `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-on**
+3. Select `firefox-extension/manifest.json`
+
+### Use
+
+1. Open your Likes page on `x.com` (or `twitter.com`)
+2. Click the extension button → **Export new likes**
+3. A `.txt` file downloads with one tweet ID per line
+
+### Import
+
+```bash
+clj -M -m twitter-scraper.core --import /path/to/twitter-likes-YYYY-MM-DD.txt --output ./archive
+```
+
 ## Project Structure
 
 ```
