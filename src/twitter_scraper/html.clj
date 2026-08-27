@@ -42,10 +42,14 @@
   var isLoading = false;
   var searchQuery = '';
   var activeAuthor = null;
+  var sortOrder = 'desc'; // 'desc' = newest first, 'asc' = oldest first
+  var activeYear = null;
+  var activeMonth = null; // 1-12
   var container = document.getElementById('tweet-list');
   var statusEl = document.getElementById('status');
   var searchInput = document.getElementById('search');
   var filtersEl = document.getElementById('filters');
+  var sortBtn = document.getElementById('sort-toggle');
 
   // Theme
   var html = document.documentElement;
@@ -204,6 +208,8 @@
       el.style.cursor = 'pointer';
       el.addEventListener('click', function(e) {
         e.preventDefault();
+        var authorSelect = document.getElementById('author-filter');
+        if (authorSelect) authorSelect.value = this.dataset.author;
         setAuthorFilter(this.dataset.author);
       });
     });
@@ -214,6 +220,13 @@
     var total = filteredTweets.length;
     var allTotal = allTweets.length;
     var parts = [];
+    if (activeYear || activeMonth) {
+      var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var dateParts = [];
+      if (activeMonth) dateParts.push(monthNames[parseInt(activeMonth) - 1]);
+      if (activeYear) dateParts.push(activeYear);
+      parts.push('from ' + dateParts.join(' '));
+    }
     if (activeAuthor) parts.push('by @' + activeAuthor);
     if (searchQuery) parts.push('matching \"' + searchQuery + '\"');
     var filterDesc = parts.length ? ' (' + parts.join(', ') + ')' : '';
@@ -230,20 +243,61 @@
       }
     });
 
-    // Sort by count
-    var topAuthors = Object.entries(authorCounts).sort(function(a,b) { return b[1] - a[1]; }).slice(0, 30);
-
-    var html = '<div class=\"filter-row\"><span class=\"filter-label\">Authors:</span><div class=\"filter-tags-scroll\">';
-    topAuthors.forEach(function(a) {
-      html += '<button class=\"filter-tag\" data-author=\"' + escapeHtml(a[0]) + '\">@' + escapeHtml(a[0]) + ' <span class=\"count\">' + a[1] + '</span></button>';
+    // Count by year and month
+    var yearCounts = {};
+    var monthCountsByYear = {}; // {year: {month: count}}
+    allTweets.forEach(function(t) {
+      if (t.createdAt) {
+        var d = new Date(t.createdAt);
+        var year = d.getFullYear();
+        var month = d.getMonth() + 1;
+        yearCounts[year] = (yearCounts[year] || 0) + 1;
+        if (!monthCountsByYear[year]) monthCountsByYear[year] = {};
+        monthCountsByYear[year][month] = (monthCountsByYear[year][month] || 0) + 1;
+      }
     });
-    html += '</div></div>';
+
+    // Sort years descending
+    var sortedYears = Object.keys(yearCounts).sort(function(a,b) { return b - a; });
+
+    // Build year dropdown
+    var html = '<select id=\"year-filter\" class=\"filter-select\"><option value=\"\">Year</option>';
+    sortedYears.forEach(function(y) {
+      html += '<option value=\"' + y + '\">' + y + ' (' + yearCounts[y] + ')</option>';
+    });
+    html += '</select>';
+
+    // Build month dropdown
+    html += '<select id=\"month-filter\" class=\"filter-select\"><option value=\"\">Month</option>';
+    var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    for (var i = 1; i <= 12; i++) {
+      html += '<option value=\"' + i + '\">' + monthNames[i-1] + '</option>';
+    }
+    html += '</select>';
+
+    // Sort authors by count
+    var sortedAuthors = Object.entries(authorCounts).sort(function(a,b) { return b[1] - a[1]; });
+
+    html += '<select id=\"author-filter\" class=\"filter-select author-select\"><option value=\"\">Author (' + sortedAuthors.length + ')</option>';
+    sortedAuthors.forEach(function(a) {
+      html += '<option value=\"' + escapeHtml(a[0]) + '\">@' + escapeHtml(a[0]) + ' (' + a[1] + ')</option>';
+    });
+    html += '</select>';
 
     filtersEl.innerHTML = html;
 
-    // Bind filter clicks
-    filtersEl.querySelectorAll('[data-author]').forEach(function(btn) {
-      btn.addEventListener('click', function() { setAuthorFilter(this.dataset.author); });
+    // Store month counts for updating dropdown
+    window.monthCountsByYear = monthCountsByYear;
+
+    // Bind dropdown changes
+    document.getElementById('year-filter').addEventListener('change', function() {
+      setYearFilter(this.value);
+    });
+    document.getElementById('month-filter').addEventListener('change', function() {
+      setMonthFilter(this.value);
+    });
+    document.getElementById('author-filter').addEventListener('change', function() {
+      setAuthorFilter(this.value);
     });
 
     // Bind clear button from header
@@ -251,8 +305,43 @@
     if (clearBtn) clearBtn.addEventListener('click', clearFilters);
   }
 
+  function updateMonthDropdown() {
+    var monthSelect = document.getElementById('month-filter');
+    if (!monthSelect) return;
+    var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var counts = activeYear && window.monthCountsByYear[activeYear] || {};
+
+    // Update options with counts for selected year
+    for (var i = 1; i <= 12; i++) {
+      var opt = monthSelect.options[i];
+      var count = counts[i] || 0;
+      if (activeYear) {
+        opt.textContent = monthNames[i-1] + (count ? ' (' + count + ')' : '');
+        opt.disabled = !count;
+      } else {
+        opt.textContent = monthNames[i-1];
+        opt.disabled = false;
+      }
+    }
+  }
+
   function setAuthorFilter(author) {
-    activeAuthor = (activeAuthor === author) ? null : author;
+    activeAuthor = author || null;
+    applyFilter();
+    updateClearButton();
+  }
+
+  function setYearFilter(year) {
+    activeYear = year || null;
+    if (!activeYear) activeMonth = null;
+    updateMonthDropdown();
+    updateActiveFilterUI();
+    applyFilter();
+    updateClearButton();
+  }
+
+  function setMonthFilter(month) {
+    activeMonth = month || null;
     updateActiveFilterUI();
     applyFilter();
     updateClearButton();
@@ -260,35 +349,70 @@
 
   function clearFilters() {
     activeAuthor = null;
+    activeYear = null;
+    activeMonth = null;
     searchQuery = '';
     searchInput.value = '';
-    updateActiveFilterUI();
+    var yearSelect = document.getElementById('year-filter');
+    var monthSelect = document.getElementById('month-filter');
+    var authorSelect = document.getElementById('author-filter');
+    if (yearSelect) yearSelect.value = '';
+    if (monthSelect) monthSelect.value = '';
+    if (authorSelect) authorSelect.value = '';
+    updateMonthDropdown();
     applyFilter();
     updateClearButton();
+  }
+
+  function sortTweets(tweets) {
+    return tweets.slice().sort(function(a, b) {
+      // Push tweets without dates to the end
+      if (!a.createdAt && !b.createdAt) return 0;
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      var dateA = new Date(a.createdAt);
+      var dateB = new Date(b.createdAt);
+      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    });
+  }
+
+  function toggleSort() {
+    sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
+    updateSortButton();
+    applyFilter();
+  }
+
+  function updateSortButton() {
+    if (sortBtn) {
+      sortBtn.textContent = sortOrder === 'desc' ? '↓ Newest' : '↑ Oldest';
+      sortBtn.title = sortOrder === 'desc' ? 'Showing newest first' : 'Showing oldest first';
+    }
   }
 
   function updateClearButton() {
     var clearBtn = document.getElementById('clear-filters');
     if (clearBtn) {
-      clearBtn.style.display = (activeAuthor || searchQuery) ? '' : 'none';
+      clearBtn.style.display = (activeAuthor || activeYear || activeMonth || searchQuery) ? '' : 'none';
     }
   }
 
   function updateActiveFilterUI() {
-    filtersEl.querySelectorAll('.filter-tag').forEach(function(btn) {
-      btn.classList.remove('active');
-      if (activeAuthor && btn.dataset.author === activeAuthor) {
-        btn.classList.add('active');
-      }
-    });
+    // No-op: dropdowns handle their own state
   }
 
   function applyFilter() {
     loadedCount = 0;
     container.innerHTML = '';
-    filteredTweets = allTweets.filter(function(t) {
+    var filtered = allTweets.filter(function(t) {
       var screenName = t.user && t.user.screenName;
       if (activeAuthor && screenName !== activeAuthor) return false;
+      if (activeYear || activeMonth) {
+        if (!t.createdAt) return false;
+        var d = new Date(t.createdAt);
+        if (isNaN(d.getTime())) return false;
+        if (activeYear && d.getFullYear() !== parseInt(activeYear)) return false;
+        if (activeMonth && (d.getMonth() + 1) !== parseInt(activeMonth)) return false;
+      }
       if (searchQuery) {
         var text = (t.text || '') + ' ' + (t.user && t.user.name || '') + ' ' + (screenName || '');
         if (t.article) text += ' ' + (t.article.title || '') + ' ' + (t.article.previewText || '');
@@ -296,6 +420,7 @@
       }
       return true;
     });
+    filteredTweets = sortTweets(filtered);
     loadMore();
   }
 
@@ -317,10 +442,16 @@
     }, 200);
   });
 
+  // Sort button handler
+  if (sortBtn) {
+    sortBtn.addEventListener('click', toggleSort);
+    updateSortButton();
+  }
+
   // Load data (injected by server)
   statusEl.textContent = 'Loading tweets...';
   allTweets = window.TWEET_DATA || [];
-  filteredTweets = allTweets;
+  filteredTweets = sortTweets(allTweets);
   buildFilterUI();
   applyFilter();
 })();
@@ -625,11 +756,12 @@
                  [:header.page-header
                   [:div.header-top
                    [:h1 title]
-                   [:button#theme-toggle {:type "button"} "Toggle Dark Mode"]]
+                   [:button#theme-toggle {:type "button"} "◐"]]
                   [:div.header-controls
-                   [:input#search {:type "text" :placeholder "Search tweets..." :autocomplete "off"}]
-                   [:button#clear-filters.clear-btn {:style "display:none"} "Clear filters"]]
-                  [:div#filters.filters-panel]
+                   [:input#search {:type "text" :placeholder "Search..." :autocomplete "off"}]
+                   [:div#filters.filters-inline]
+                   [:button#sort-toggle.sort-btn {:type "button"} "↓ Newest"]
+                   [:button#clear-filters.clear-btn {:style "display:none"} "✕"]]
                   [:p#status.tweet-count "Loading..."]]
                  [:main#tweet-list.tweet-list]
                  [:footer.page-footer
