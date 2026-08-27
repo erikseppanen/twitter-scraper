@@ -55,6 +55,8 @@ Open `./archive/index.html` in your browser.
 | `-s, --skip-fetch` | Skip fetching (use cached data) | |
 | `-m, --skip-media` | Skip downloading media files | |
 | `-I, --import FILE` | Import tweet IDs from file | |
+| `-r, --include-retweets` | Include retweets from export | |
+| `-R, --retweets-only` | Archive only retweets, not likes | |
 | `-h, --help` | Show help | |
 
 ## Examples
@@ -62,6 +64,12 @@ Open `./archive/index.html` in your browser.
 ```bash
 # Archive all liked tweets
 clj -M -m twitter-scraper.core --input ~/twitter-archive
+
+# Archive likes + retweets together
+clj -M -m twitter-scraper.core --input ~/twitter-archive --include-retweets
+
+# Archive only retweets (not likes)
+clj -M -m twitter-scraper.core --input ~/twitter-archive --retweets-only
 
 # Test with first 10 tweets
 clj -M -m twitter-scraper.core --input ~/twitter-archive --limit 10
@@ -118,7 +126,8 @@ resources/templates/
 | Twitter Data Export |
 | (from Settings)     |
 |                     |
-| data/like.js        |<-- Contains only tweet IDs, not content
+| data/like.js        |<-- Contains liked tweet IDs
+| data/tweet.js       |<-- Contains your tweets (including retweets)
 +---------+-----------+
           |
           | --input

@@ -118,3 +118,75 @@
            :like-file-count (count like-files)}
           {:valid false
            :error "Could not find Twitter export data. Expected 'data' directory or 'like.js' file."})))))
+
+;; === Retweet extraction from tweet.js ===
+
+(defn discover-tweet-files
+  "Find all tweet.js part files in the export directory.
+   Twitter splits large exports into multiple parts."
+  [export-dir]
+  (let [data-dir (io/file export-dir "data")]
+    (if (.exists data-dir)
+      (->> (.listFiles data-dir)
+           (filter #(re-matches #"tweets?\.js|tweet-part\d+\.js" (.getName %)))
+           (sort-by #(.getName %))
+           vec)
+      (let [direct-file (io/file export-dir "tweet.js")]
+        (if (.exists direct-file)
+          [direct-file]
+          [])))))
+
+(defn parse-all-tweets
+  "Parse all tweet files from a Twitter export directory.
+   Returns the user's own tweets (including retweets)."
+  [export-dir]
+  (let [tweet-files (discover-tweet-files export-dir)]
+    (if (empty? tweet-files)
+      (do
+        (util/log-warn "No tweet.js files found in" export-dir)
+        [])
+      (do
+        (util/log-info "Found" (count tweet-files) "tweet file(s)")
+        (->> tweet-files
+             (mapcat #(parse-tweet-js (.getPath %)))
+             (distinct)
+             vec)))))
+
+(defn is-retweet?
+  "Check if a tweet is a retweet based on its content or metadata."
+  [tweet]
+  (let [full-text (or (:full-text tweet) "")]
+    (str/starts-with? full-text "RT @")))
+
+(defn extract-id-from-entities
+  "Extract original tweet ID from entities URLs.
+   Retweets with media include URLs like x.com/user/status/ID/photo/1"
+  [entities extended-entities]
+  (let [;; Check media URLs in extended_entities (most reliable for retweets with media)
+        media-urls (->> (or (:media extended-entities) (:media entities))
+                        (keep :expanded_url))
+        ;; Check regular URLs
+        regular-urls (->> (:urls entities)
+                          (keep :expanded_url))
+        all-urls (concat media-urls regular-urls)]
+    (->> all-urls
+         (keep #(second (re-find #"(?:twitter|x)\.com/\w+/status/(\d+)" %)))
+         first)))
+
+(defn extract-retweet-id
+  "Extract the original tweet ID from a retweet.
+   First tries retweeted_status_id_str, then parses from entities/extended-entities URLs."
+  [tweet]
+  (or (:retweeted_status_id_str tweet)
+      (extract-id-from-entities (:entities tweet) (:extended-entities tweet))))
+
+(defn extract-retweet-ids
+  "Extract original tweet IDs from all retweets in the export.
+   Returns a vector of tweet ID strings."
+  [tweets]
+  (->> tweets
+       (filter is-retweet?)
+       (map extract-retweet-id)
+       (filter some?)
+       distinct
+       vec))

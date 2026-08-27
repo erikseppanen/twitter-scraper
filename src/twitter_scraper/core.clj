@@ -21,6 +21,8 @@
    ["-s" "--skip-fetch" "Skip fetching tweet data (use cached data)"]
    ["-m" "--skip-media" "Skip downloading media files"]
    ["-I" "--import FILE" "Import tweet IDs from file (one per line) and merge with existing archive"]
+   ["-r" "--include-retweets" "Include retweets from Twitter export (fetches original tweets)"]
+   ["-R" "--retweets-only" "Archive only retweets, not likes"]
    ["-h" "--help" "Show this help"]])
 
 (defn usage [options-summary]
@@ -88,7 +90,7 @@
 
 (defn run-archive
   "Main archiving pipeline."
-  [{:keys [input output delay limit skip-fetch skip-media]}]
+  [{:keys [input output delay limit skip-fetch skip-media include-retweets retweets-only]}]
   (util/log-info "Starting Twitter Likes Archiver")
   (util/log-info "Input:" input)
   (util/log-info "Output:" output)
@@ -104,13 +106,26 @@
   (util/ensure-directory (str output "/media"))
   (util/ensure-directory (str output "/tweets"))
 
-  ;; Step 1: Parse likes
+  ;; Step 1: Parse likes and/or retweets
   (util/log-info "")
   (util/log-info "=== Step 1: Parsing Twitter Export ===")
-  (let [likes (parser/parse-all-likes input)
-        all-tweet-ids (parser/extract-tweet-ids likes)
+  (let [;; Get liked tweet IDs (unless retweets-only)
+        like-ids (if retweets-only
+                   []
+                   (let [likes (parser/parse-all-likes input)]
+                     (util/log-info "Found" (count likes) "liked tweets")
+                     (parser/extract-tweet-ids likes)))
+        ;; Get retweet IDs (if include-retweets or retweets-only)
+        retweet-ids (if (or include-retweets retweets-only)
+                      (let [tweets (parser/parse-all-tweets input)
+                            rt-ids (parser/extract-retweet-ids tweets)]
+                        (util/log-info "Found" (count rt-ids) "retweets")
+                        rt-ids)
+                      [])
+        ;; Combine and deduplicate
+        all-tweet-ids (distinct (concat like-ids retweet-ids))
         tweet-ids (if limit (take limit all-tweet-ids) all-tweet-ids)]
-    (util/log-info "Found" (count all-tweet-ids) "liked tweets")
+    (util/log-info "Total unique tweets to archive:" (count all-tweet-ids))
     (when limit
       (util/log-info "Limiting to first" limit "tweets"))
 
@@ -118,22 +133,33 @@
       (util/log-error "No tweets found in export")
       (System/exit 1))
 
-    ;; Step 2: Fetch tweet data
+    ;; Step 2: Fetch tweet data (merges with existing cache to preserve deleted tweets)
     (util/log-info "")
     (util/log-info "=== Step 2: Fetching Tweet Data ===")
-    (let [tweets (if skip-fetch
-                   (or (load-cache output)
-                       (do (util/log-error "No cache found. Cannot skip fetch.")
-                           (System/exit 1)))
-                   (let [fetched (fetcher/fetch-tweets-batch
-                                  tweet-ids
-                                  {:delay-ms delay
-                                   :on-progress #(print-progress "Fetching" %1 %2 %3)})]
-                     (save-cache (vals fetched) output)
-                     (vals fetched)))]
+    (let [existing-tweets (or (load-cache output) [])
+          existing-ids (set (map :tweet-id existing-tweets))
+          _ (when (seq existing-tweets)
+              (util/log-info "Existing tweets in cache:" (count existing-tweets)))
+          tweets (if skip-fetch
+                   (if (seq existing-tweets)
+                     existing-tweets
+                     (do (util/log-error "No cache found. Cannot skip fetch.")
+                         (System/exit 1)))
+                   (let [ids-to-fetch (filterv #(not (existing-ids %)) tweet-ids)
+                         _ (util/log-info "New tweets to fetch:" (count ids-to-fetch))
+                         fetched (if (seq ids-to-fetch)
+                                   (fetcher/fetch-tweets-batch
+                                    ids-to-fetch
+                                    {:delay-ms delay
+                                     :on-progress #(print-progress "Fetching" %1 %2 %3)})
+                                   {})
+                         new-tweets (vals fetched)
+                         all-tweets (concat existing-tweets new-tweets)]
+                     (save-cache all-tweets output)
+                     all-tweets))]
 
       (util/log-info "")
-      (util/log-info "Successfully fetched" (count tweets) "tweets")
+      (util/log-info "Total tweets in archive:" (count tweets))
       (util/log-info (str (- (count tweet-ids) (count tweets)) " tweets were unavailable (deleted/private)"))
 
       ;; Step 3: Download media
