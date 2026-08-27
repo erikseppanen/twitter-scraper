@@ -23,6 +23,7 @@
    ["-I" "--import FILE" "Import tweet IDs from file (one per line) and merge with existing archive"]
    ["-r" "--include-retweets" "Include retweets from Twitter export (fetches original tweets)"]
    ["-R" "--retweets-only" "Archive only retweets, not likes"]
+   ["-F" "--refetch-failed" "Re-fetch tweets that previously failed (empty text/user)"]
    ["-h" "--help" "Show this help"]])
 
 (defn usage [options-summary]
@@ -58,6 +59,10 @@
 
       ;; Import mode doesn't require --input
       (:import options)
+      {:options options}
+
+      ;; Refetch mode doesn't require --input
+      (:refetch-failed options)
       {:options options}
 
       (nil? (:input options))
@@ -282,6 +287,90 @@
               (util/log-info "Total tweets in archive:" (count tweets-with-media))
               (util/log-info "Open" (str output "/index.html") "in your browser"))))))))
 
+(defn is-empty-tweet?
+  "Check if a tweet has no content (failed to fetch)."
+  [tweet]
+  (and (nil? (:text tweet))
+       (or (nil? (:user tweet))
+           (nil? (get-in tweet [:user :screen-name])))))
+
+(defn run-refetch-failed
+  "Re-fetch tweets that previously failed (have nil text/user)."
+  [{:keys [output delay skip-media]}]
+  (util/log-info "Re-fetching failed tweets")
+  (util/log-info "Output:" output)
+
+  (let [existing-tweets (or (load-cache output) [])]
+    (util/log-info "Total tweets in cache:" (count existing-tweets))
+
+    (let [empty-tweets (filter is-empty-tweet? existing-tweets)
+          empty-ids (map :tweet-id empty-tweets)]
+      (util/log-info "Found" (count empty-ids) "empty/failed tweets")
+
+      (if (empty? empty-ids)
+        (util/log-info "No failed tweets to re-fetch")
+        (do
+          ;; Ensure output directories exist
+          (util/ensure-directory output)
+          (util/ensure-directory (str output "/media"))
+          (util/ensure-directory (str output "/tweets"))
+
+          ;; Fetch the failed tweets
+          (util/log-info "")
+          (util/log-info "=== Re-fetching Failed Tweets ===")
+          (let [fetched (fetcher/fetch-tweets-batch
+                         empty-ids
+                         {:delay-ms delay
+                          :on-progress #(print-progress "Fetching" %1 %2 %3)})
+                fetched-map (into {} (map (fn [t] [(:tweet-id t) t]) (vals fetched)))
+                ;; Replace empty tweets with fetched ones where available
+                updated-tweets (mapv (fn [tweet]
+                                       (if (is-empty-tweet? tweet)
+                                         (get fetched-map (:tweet-id tweet) tweet)
+                                         tweet))
+                                     existing-tweets)
+                recovered-count (count (filter #(not (is-empty-tweet? %))
+                                               (filter #(is-empty-tweet? (first (filter (fn [t] (= (:tweet-id t) (:tweet-id %))) existing-tweets))) updated-tweets)))]
+
+            (util/log-info "")
+            (util/log-info "Recovered" (count fetched) "tweets")
+            (save-cache updated-tweets output)
+
+            ;; Download media for recovered tweets
+            (util/log-info "")
+            (util/log-info "=== Downloading Media ===")
+            (let [tweets-with-media
+                  (if skip-media
+                    (do (util/log-info "Skipping media download")
+                        updated-tweets)
+                    (let [media-dir (str output "/media")
+                          articles-dir (str output "/articles")
+                          recovered (vals fetched)]
+                      ;; Only download media for recovered tweets
+                      (let [recovered-with-media (-> recovered
+                                                     (fetcher/download-all-media
+                                                      media-dir
+                                                      {:on-progress #(print-progress "Media" %1 %2 %3)})
+                                                     (fetcher/download-all-article-media articles-dir))
+                            recovered-map (into {} (map (fn [t] [(:tweet-id t) t]) recovered-with-media))]
+                        ;; Merge back into full list
+                        (mapv (fn [tweet]
+                                (get recovered-map (:tweet-id tweet) tweet))
+                              updated-tweets))))]
+
+              ;; Regenerate HTML
+              (util/log-info "")
+              (util/log-info "=== Regenerating HTML Pages ===")
+              (html/copy-css output)
+              (html/generate-all-pages
+               tweets-with-media
+               output
+               {:on-progress #(print-progress "HTML" %1 %2 %3)})
+
+              (util/log-info "")
+              (util/log-info "=== Re-fetch Complete ===")
+              (util/log-info "Open" (str output "/index.html") "in your browser"))))))))
+
 (defn -main [& args]
   (let [{:keys [options exit-message ok?]} (validate-args args)]
     (if exit-message
@@ -289,9 +378,10 @@
         (println exit-message)
         (System/exit (if ok? 0 1)))
       (try
-        (if (:import options)
-          (run-import options)
-          (run-archive options))
+        (cond
+          (:refetch-failed options) (run-refetch-failed options)
+          (:import options) (run-import options)
+          :else (run-archive options))
         (catch Exception e
           (util/log-error "Fatal error:" (.getMessage e))
           (.printStackTrace e)
