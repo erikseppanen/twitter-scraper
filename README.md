@@ -1,201 +1,194 @@
 # Twitter Likes Archiver
 
-A Clojure CLI tool that processes a Twitter data export, downloads all media from liked tweets, and generates static HTML pages for offline viewing.
+A private Twitter/X likes archive running on a Mac Mini. A Node service schedules updates,
+uses a dedicated Chrome session to collect new likes, and calls a Clojure importer to fetch
+content, download media, and generate searchable HTML. No LLM or browser extension is required.
 
-## Features
+## Everyday use
 
-- Parses `like.js` from Twitter data exports
-- Fetches full tweet data via Twitter's syndication API (no API key needed)
-- Downloads images, videos, and GIFs locally
-- Generates browsable static HTML with dark/light mode support
-- Caches fetched data to resume interrupted runs
+Open your saved private bookmark, then choose **Browse archive** or **Update now**.
+Automatic checks run approximately every four hours while the service is running. Search,
+year/month/author filters, sorting, and light/dark themes are available in the archive.
+Individual tweet and article pages include downloaded media; quoted photos, videos, and
+GIFs appear inside quoted cards.
 
-## Prerequisites
+If X requires a new login, choose **Reconnect X**, sign into the dedicated Chrome window
+on the Mini, then choose **Finish sign-in**. Automatic checks pause during sign-in. Your
+ordinary Chrome windows can stay open. After a reboot, log into the Mini's macOS account
+so the service can start.
 
-- [Clojure CLI](https://clojure.org/guides/install_clojure) (1.11+)
-- Java 11+
+See the [everyday guide](TUTORIAL.md) for browsing, backups, and recovery.
 
-## Installation
+## Architecture
 
-```bash
-git clone https://github.com/YOUR-GITHUB-USER/twitter-scraper.git
-cd twitter-scraper
+```mermaid
+flowchart TD
+    Schedule[Four-hour schedule or Update now] --> Worker[Node worker + Playwright]
+    Worker --> Chrome[Dedicated Chrome profile on the Mini]
+    Chrome --> Likes[Collect IDs from the signed-in X Likes page]
+    Likes --> Importer[Clojure importer]
+    Export[Optional historical Twitter export or ID file] --> Importer
+    Importer --> Fetch[Fetch content from syndication and FXTwitter APIs]
+    Fetch --> Stage[Download media and generate HTML in archive-staging]
+    Stage --> Validate[Validate newly collected tweets have content]
+    Validate --> Archive[Publish archive; retain archive-previous]
+    Browser[Viewer with private bookmark] --> Funnel[Tailscale Funnel HTTPS :8443]
+    Funnel --> Server[Authenticated Node server on 127.0.0.1:4318]
+    Server --> Archive
+    Server --> Schedule
 ```
 
-## Usage
+- **Node service:** serves the dashboard and protected archive, persists status, and checks
+  every 30 seconds whether an update is due. Each attempt schedules the next check four
+  hours after it finishes. Only one update or sign-in runs at a time.
+- **Browser worker:** launches installed Google Chrome using a separate profile in
+  `.service/browser`. Playwright connects to headless Chrome for collection; user sign-in
+  happens in a normal visible Chrome window. The worker uses tweet timestamp links to
+  collect parent IDs and tracks the order of likes, rather than comparing tweet creation IDs.
+- **Clojure pipeline:** imports only new IDs, fetches text, articles, and quoted content,
+  downloads media, persists metadata, and generates the index, JSON, and individual pages.
+  Twitter's syndication response also provides a fallback for quoted media when the
+  supplemental API cannot return it. These content APIs do not require an API key;
+  collecting the user's Likes page requires the saved X login.
+- **Publication:** normal updates use an APFS copy-on-write staging directory. Missing
+  content for a newly collected ID blocks publication. After validation, directory renames
+  publish the result and retain the previous archive for rollback. Startup can recover an
+  interruption between those renames. Media download failures are not part of this content
+  validation; unavailable media may retain a remote URL.
+- **Storage:** plain files and an EDN metadata cache; there is no database or cloud scraper.
+  The generated archive can also be opened locally without the Node server.
 
-### 1. Download your Twitter archive
+The first collection looks for overlap with the existing archive. Later runs seek the
+saved like-order cutoff. This is incremental collection, not a guaranteed complete
+historical backfill. If a run imports a valid batch but cannot reach its cutoff, it can
+publish that batch while preserving the old cutoff and reporting that a retry is needed.
+X login challenges, page changes, and unavailable source tweets can require intervention.
 
-Go to Twitter Settings → Your Account → Download an archive of your data
+## Private remote access
 
-### 2. Extract the archive
+The current Mini deployment uses **Tailscale Funnel on HTTPS port 8443**, forwarding to
+the Node service on **127.0.0.1:4318**. Viewing devices do not need Tailscale installed.
+Tailscale Serve is an alternative for deployments restricted to a tailnet.
 
-```bash
-unzip twitter-*.zip -d ~/twitter-archive
-```
+The saved bookmark carries a random secret in its URL fragment. The dashboard exchanges
+it for an HttpOnly, Secure, SameSite cookie and removes the fragment from the address bar.
+The dashboard shell is publicly reachable; archive files, status, and control actions
+require authentication. Anyone holding the private link can view the archive and operate
+the dashboard. This is bearer-link access, not individual user accounts.
 
-### 3. Run the archiver
+`PUBLIC_ORIGIN` must match the external HTTPS origin, including the port. Keep the archive
+behind the authenticated server; do not publish its directory as an unprotected static site.
+See [service operations](service/README.md#access) for access configuration and token rotation.
 
-```bash
-clj -M -m twitter-scraper.core --input ~/twitter-archive --output ./archive
-```
+## Installation and runtime
 
-### 4. View the results
+The deployed service targets **macOS on Apple Silicon with APFS**. Its installer expects
+Homebrew tools under `/opt/homebrew`:
 
-Open `./archive/index.html` in your browser.
+- Node.js and npm for the service and its locked Playwright dependency.
+- Installed Google Chrome for collection and interactive X login.
+- Clojure CLI and Java 21 for the importer.
+- Python 3 for generating the LaunchAgent and desktop bookmark during installation.
+- Tailscale configured to proxy HTTPS to the local service.
 
-## Options
+Follow the [installation and operations guide](service/README.md) to configure the HTTPS
+proxy and run `scripts/install-mini.sh` with the correct `PUBLIC_ORIGIN`. The installer
+installs Node dependencies, runs checks, and registers the `local.twitter-archive` user
+LaunchAgent. It starts at macOS login and restarts after a crash. The installer does not
+configure Funnel or expose the archive by itself.
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-i, --input PATH` | Path to Twitter export directory | (required) |
-| `-o, --output PATH` | Output directory for archive | `./archive` |
-| `-d, --delay MS` | Delay between API requests (ms) | `500` |
-| `-l, --limit N` | Limit to first N tweets | (all) |
-| `-s, --skip-fetch` | Skip fetching (use cached data) | |
-| `-m, --skip-media` | Skip downloading media files | |
-| `-I, --import FILE` | Import tweet IDs from file | |
-| `-r, --include-retweets` | Include retweets from export | |
-| `-R, --retweets-only` | Archive only retweets, not likes | |
-| `-h, --help` | Show help | |
+The Clojure CLI can also be used separately for export imports and maintenance. It remains
+a required part of the automated service; removing the old extension does not remove it.
 
-## Examples
+## Project and data layout
 
-```bash
-# Archive all liked tweets
-clj -M -m twitter-scraper.core --input ~/twitter-archive
-
-# Archive likes + retweets together
-clj -M -m twitter-scraper.core --input ~/twitter-archive --include-retweets
-
-# Archive only retweets (not likes)
-clj -M -m twitter-scraper.core --input ~/twitter-archive --retweets-only
-
-# Test with first 10 tweets
-clj -M -m twitter-scraper.core --input ~/twitter-archive --limit 10
-
-# Resume with cached data, re-download media
-clj -M -m twitter-scraper.core --input ~/twitter-archive --skip-fetch
-
-# Fast run: use cache, skip media
-clj -M -m twitter-scraper.core --input ~/twitter-archive --skip-fetch --skip-media
-```
-
-## Firefox Extension (export new likes)
-
-There is a simple Firefox extension to export newly liked tweet IDs to a text file.
-
-### Install
-
-1. Open Firefox and go to `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on**
-3. Select `firefox-extension/manifest.json`
-
-### Use
-
-1. Open your Likes page on `x.com` (or `twitter.com`)
-2. Click the extension button → **Set current as baseline** (first time only)
-   - Or choose **Pick baseline by click** and click the tweet you want as the cutoff
-3. Click **Export new likes**
-4. A `.txt` file downloads with one tweet ID per line
-
-### Import
-
-```bash
-clj -M -m twitter-scraper.core --import /path/to/twitter-likes-YYYY-MM-DD.txt --output ./archive
-```
-
-## Project Structure
-
-```
+```text
+service/
+  server.mjs              HTTP authentication, protected files, APIs, scheduler
+  worker.mjs              Chrome lifecycle, Likes collection, staged imports
+  dashboard.html          Private-link login, status, update and sign-in controls
+  *test.mjs               Service, browser, and deployment checks
+scripts/
+  install-mini.sh         macOS LaunchAgent and private bookmark installer
+  backfill-quote.clj      Fetch media for existing quotes from older archives
+  restore-syndication-quotes.clj  Recover quotes from saved Twitter responses
 src/twitter_scraper/
-├── core.clj      # CLI entry point, orchestrates pipeline
-├── parser.clj    # Parses Twitter export like.js files
-├── fetcher.clj   # Fetches tweet data, downloads media
-├── html.clj      # Generates static HTML pages
-└── util.clj      # Shared utilities (logging, retry, file ops)
+  core.clj                CLI and import/archive/recovery pipelines
+  parser.clj              Twitter export and retweet parsing
+  fetcher.clj             Content APIs, quoted content, media downloads
+  html.clj                Index, JSON, tweet and article page generation
+  util.clj                Shared utilities
+resources/templates/style.css
+test/twitter_scraper/core_test.clj
 
-resources/templates/
-└── style.css     # Styling for generated HTML
+archive/                  Published HTML, tweets.json, media/, articles/, tweets/
+  .tweet-cache.edn         Cached metadata, text, and media references
+archive-staging/          Temporary working copy for a normal update
+archive-previous/         Previous published archive for rollback
+.service/                 Private runtime state; excluded from Git
+  access.json             Bearer credential
+  private-link.txt        Complete private bookmark
+  status.json             Schedule, like-order cutoff, and update/login status
+  browser/                Dedicated Chrome profile and saved X session
+  pending.txt             IDs passed to the importer
+  service.log, error.log   LaunchAgent output
 ```
 
-## Data Flow
+## Imports and maintenance
 
-```
-+---------------------+
-| Twitter Data Export |
-| (from Settings)     |
-|                     |
-| data/like.js        |<-- Contains liked tweet IDs
-| data/tweet.js       |<-- Contains your tweets (including retweets)
-+---------+-----------+
-          |
-          | --input
-          v
-+------------------------------------------------------------------+
-|                        twitter-scraper                           |
-|                                                                  |
-|  +-----------+    +-----------+    +-----------+    +----------+ |
-|  | parser    |--->| fetcher   |--->| fetcher   |--->| html     | |
-|  |           |    |           |    |           |    |          | |
-|  | Extract   |    | Fetch     |    | Download  |    | Generate | |
-|  | tweet IDs |    | tweet data|    | media     |    | HTML     | |
-|  +-----------+    | from API  |    | files     |    | pages    | |
-|                   +-----+-----+    +-----+-----+    +----+-----+ |
-+-------------------------|--------------|--------------|----------+
-                          |              |              |
-                          v              v              v
-                    +---------------------------------------------+
-                    |                 ./archive/                  |
-                    |                                             |
-                    |  .tweet-cache.edn  <-- Tweet metadata cache |
-                    |                       (text, authors, dates,|
-                    |                        media URLs, articles)|
-                    |                       BACK UP THIS FILE!    |
-                    |                                             |
-                    |  media/            <-- Downloaded images    |
-                    |  articles/         <-- Article covers       |
-                    |  tweets/           <-- Individual pages     |
-                    |  index.html        <-- Main browsable page  |
-                    |                                             |
-                    +---------------------------------------------+
-```
-
-**Important:** The cache file (`.tweet-cache.edn`) stores all fetched tweet data. The Twitter export only contains tweet IDs, not content. Without the cache, content must be re-fetched from the API.
-
-## Incremental Updates
-
-After your initial archive, you can add new liked tweets without requesting another Twitter data export.
-
-### Option 1: Manual collection
-
-As you browse Twitter and like tweets, copy their URLs to a text file:
+Daily updates require no terminal commands. Initial historical imports, optional retweets,
+and recovery remain available through the CLI. Use a separate output directory for manual
+work; do not run competing imports against the live service's archive.
 
 ```bash
-# new-tweets.txt (one per line)
-https://x.com/user/status/1234567890123456789
-https://x.com/other/status/9876543210987654321
+# Initial historical import from an extracted Twitter export
+clj -M -m twitter-scraper.core --input ~/twitter-archive --output ./archive-repair
+
+# Add specific IDs or tweet URLs, one per line
+clj -M -m twitter-scraper.core --import /path/to/tweet-ids.txt --output ./archive-repair
+
+# Include retweets from the export (not collected by Likes automation)
+clj -M -m twitter-scraper.core --input ~/twitter-archive --output ./archive-repair --include-retweets
+
+# Retry cached entries missing tweet content
+clj -M -m twitter-scraper.core --refetch-failed --output ./archive-repair
+
+# Regenerate pages from an existing cache without network access
+clj -M -m twitter-scraper.core --input ~/twitter-archive --output ./archive-repair --skip-fetch --skip-media
+
+# Full CLI reference
+clj -M -m twitter-scraper.core --help
 ```
 
-Then import:
+For recovery, first prepare a copy of the existing archive at the chosen output path.
+Verify that the live cache has not changed before publishing a repaired copy. The
+[maintenance guide](TUTORIAL.md#maintenance-and-recovery) covers missing media, quoted-media
+migrations, and retweet-only imports. Those migration scripts are not recurring tasks;
+new imports include quoted media automatically.
+
+## Backups
+
+Back up the **entire `archive/` directory**, including the hidden `.tweet-cache.edn`,
+`media/`, and `articles/`. The cache stores metadata, not image or video bytes. HTML and
+JSON can be regenerated, but deleted source media may never be downloadable again.
+`archive-previous` is a rollback copy, not an independent backup.
+
+Back up service configuration and `.service/` state securely if you need to recover the
+installation and its cutoff. These files include credentials and session data: keep them
+out of Git and public assets. Restoring a Chrome profile may still require a new X login.
+
+## Validation
 
 ```bash
-clj -M -m twitter-scraper.core -I new-tweets.txt --output ./archive
+clojure -M:test
+npm ci --prefix service
+npm test --prefix service
+npm --prefix service run test:quotes
 ```
 
-### Option 2: Browser scraping with Claude
-
-Ask Claude: "Scrape my new liked tweets and update my archive"
-
-Claude will open a browser for you to log in, then scrape your likes page and import new tweets automatically.
-
-### Import file format
-
-The import file accepts one entry per line:
-- Tweet IDs: `1234567890123456789`
-- Tweet URLs: `https://x.com/username/status/1234567890123456789`
-
-The tool automatically skips tweets already in your archive.
+These cover import/cache behavior, quote extraction and rendering, server access controls,
+and quoted-image display in Chrome. See [service test documentation](service/README.md#tests)
+for collection fixtures, login persistence, and checks against a running deployment.
 
 ## License
 

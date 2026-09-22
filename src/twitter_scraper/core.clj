@@ -91,7 +91,8 @@
   (let [cache-file (str output-dir "/.tweet-cache.edn")]
     (when (util/file-exists? cache-file)
       (util/log-info "Loading cached tweet data...")
-      (edn/read-string (slurp cache-file)))))
+      (mapv #(fetcher/restore-local-media % output-dir)
+            (edn/read-string (slurp cache-file))))))
 
 (defn run-archive
   "Main archiving pipeline."
@@ -272,6 +273,9 @@
                                                 {:on-progress #(print-progress "Media" %1 %2 %3)})
                                                (fetcher/download-all-article-media articles-dir))]
                         (concat existing-tweets new-with-media))))]
+
+              ;; Persist downloaded paths so later imports keep serving local media.
+              (save-cache tweets-with-media output)
 
               ;; Regenerate HTML for all tweets
               (util/log-info "")

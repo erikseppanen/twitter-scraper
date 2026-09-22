@@ -20,3 +20,18 @@
 # OS
 .DS_Store
 Thumbs.db
+
+# Autonomous service credentials, sessions and dependencies
+.service/
+service/node_modules/
+archive-staging/
+archive-previous/
+
+archive-repair/
+archive-before-media-repair/
+
+# Private manual collections and local credentials
+/new-tweets-to-import.txt
+.env
+.env.*
+!.env.example

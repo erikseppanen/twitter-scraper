@@ -132,11 +132,12 @@
       articleHtml = '<div class=\"quote-article\">' + cover + '<div class=\"quote-article-info\"><div class=\"quote-article-title\">' + title + '</div><div class=\"quote-article-preview\">' + preview + '</div></div></div>';
     }
 
-    return '<a class=\"quote-card\" href=\"' + quoteLink + '\" target=\"_blank\" rel=\"noopener\">' +
-      '<div class=\"quote-header\"><span class=\"quote-name\">' + displayName + '</span> <span class=\"quote-username\">@' + escapeHtml(screenName) + '</span></div>' +
+    return '<div class=\"quote-card\">' + '<a href=\"' + quoteLink + '\" target=\"_blank\" rel=\"noopener\">' +
+      '<div class=\"quote-header\"><span class=\"quote-name\">' + displayName + '</span> <span class=\"quote-username\">@' + escapeHtml(screenName) + '</span></div></a>' +
       (textHtml ? '<div class=\"quote-text\">' + textHtml + '</div>' : '') +
-      articleHtml +
-      '</a>';
+      renderMedia(quote.media) +
+      (articleHtml ? '<a href=\"' + quoteLink + '\" target=\"_blank\" rel=\"noopener\">' + articleHtml + '</a>' : '') +
+      '</div>';
   }
 
   function renderTweet(t, query) {
@@ -654,6 +655,17 @@
         [:div.tweet-text-container.expanded
          [:p.tweet-text (raw-string (linkify-text text))]]))))
 
+(defn render-quote-card [quote media-prefix articles-prefix]
+  (when quote
+    [:div.quote-card
+     [:a.quote-header {:href (str "https://twitter.com/i/status/" (:tweet-id quote))
+                       :target "_blank" :rel "noopener"}
+      [:span.quote-name (get-in quote [:user :name])]
+      [:span.quote-username (str "@" (get-in quote [:user :screen-name]))]]
+     (render-tweet-text (:text quote))
+     (render-media-grid (:media quote) media-prefix)
+     (render-article-card (:article quote) (:tweet-id quote) articles-prefix)]))
+
 (defn render-tweet-card
   "Render a single tweet as a card.
    media-prefix determines the path prefix for local media files."
@@ -681,6 +693,7 @@
       (render-tweet-text text)]
      (render-media-grid media media-prefix)
      (render-article-card article tweet-id articles-prefix)
+     (render-quote-card (:quote tweet) media-prefix articles-prefix)
      [:footer.tweet-footer
       (when created-at
         [:time.tweet-date {:datetime created-at}
@@ -726,15 +739,7 @@
                :previewText (:preview-text article)
                :coverImage (:cover-image article)})
    :quote (when-let [quote-tweet (:quote tweet)]
-            {:tweetId (:tweet-id quote-tweet)
-             :text (:text quote-tweet)
-             :user {:name (get-in quote-tweet [:user :name])
-                    :screenName (get-in quote-tweet [:user :screen-name])
-                    :profileImage (get-in quote-tweet [:user :profile-image])}
-             :article (when-let [article (:article quote-tweet)]
-                        {:title (:title article)
-                         :previewText (:preview-text article)
-                         :coverImage (:cover-image article)})})})
+            (tweet->json-data quote-tweet))})
 
 (defn generate-tweets-json
   "Generate tweets.json file with all tweet data."

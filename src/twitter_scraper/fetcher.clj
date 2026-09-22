@@ -109,6 +109,19 @@
      :entity-map (get-in article [:content :entityMap] [])
      :media-entities (:media_entities article)}))
 
+(defn extract-fx-media
+  "Normalize quoted photo/video media from the FX response."
+  [tweet]
+  (->> (or (get-in tweet [:media :all])
+           (concat (get-in tweet [:media :photos]) (get-in tweet [:media :videos])))
+       (keep (fn [item]
+               (when (and (:url item) (contains? #{"photo" "video" "gif" "animated_gif"} (:type item)))
+                 {:type (if (contains? #{"gif" "animated_gif"} (:type item)) :gif (keyword (:type item)))
+                  :url (:url item)
+                  :poster (:thumbnail_url item)})))
+       distinct
+       vec))
+
 (defn extract-quote-from-response
   "Extract quote tweet data from a tweet response."
   [tweet-data]
@@ -119,6 +132,7 @@
      :user {:name (get-in quote-tweet [:author :name])
             :screen-name (get-in quote-tweet [:author :screen_name])
             :profile-image (get-in quote-tweet [:author :avatar_url])}
+     :media (extract-fx-media quote-tweet)
      :article (extract-article-from-response quote-tweet)}))
 
 (defn fetch-article-data
@@ -136,6 +150,26 @@
     (catch Exception e
       (util/log-warn "Failed to fetch article/quote for tweet" tweet-id "-" (.getMessage e))
       nil)))
+
+(defn extract-syndication-quote
+  "Keep quote content and media even when the supplemental API is unavailable."
+  [body]
+  (when-let [quote (:quoted_tweet body)]
+    {:tweet-id (:id_str quote)
+     :text (:text quote)
+     :created-at (:created_at quote)
+     :user {:name (get-in quote [:user :name])
+            :screen-name (get-in quote [:user :screen_name])
+            :profile-image (get-in quote [:user :profile_image_url_https])}
+     :media (extract-media quote)}))
+
+(defn combine-quote [body extra-data]
+  (let [fallback (extract-syndication-quote body)
+        supplemental (:quote extra-data)]
+    (when (or fallback supplemental)
+      (cond-> (merge fallback supplemental)
+        (and (seq (:media fallback)) (empty? (:media supplemental)))
+        (assoc :media (:media fallback))))))
 
 (defn fetch-tweet-data
   "Fetch full tweet data from Twitter's syndication API.
@@ -174,7 +208,7 @@
                                    :retweets (get-in body [:conversation_count] 0)}
                          :raw body}
                   (:article extra-data) (assoc :article (:article extra-data))
-                  (:quote extra-data) (assoc :quote (:quote extra-data)))))
+                  (combine-quote body extra-data) (assoc :quote (combine-quote body extra-data)))))
         404 (do (util/log-warn "Tweet not found:" tweet-id)
                 nil)
         (do (util/log-warn "Failed to fetch tweet" tweet-id "- Status:" (:status response))
@@ -189,6 +223,21 @@
   (let [ext (or (util/media-extension media-url) "jpg")
         base (str tweet-id "_" index)]
     (str base "." ext)))
+
+(defn restore-local-media
+  "Recover existing downloaded media paths from caches written before paths were saved."
+  [tweet output-dir]
+  (let [tweet (cond-> tweet (:quote tweet) (update :quote restore-local-media output-dir))]
+   (if (seq (:media tweet))
+    (update tweet :media
+            (fn [media]
+              (mapv (fn [index item]
+                      (let [filename (generate-media-filename (:tweet-id tweet) (:url item) index)]
+                        (if (util/file-exists? (str output-dir "/media/" filename))
+                          (assoc item :local-path filename)
+                          item)))
+                    (range) media)))
+    tweet)))
 
 (defn download-file
   "Download a file from URL to destination path.
@@ -324,7 +373,8 @@
          (map-indexed
           (fn [idx tweet]
             (when on-progress (on-progress idx total (:tweet-id tweet)))
-            (download-media tweet media-dir)))
+            (cond-> (download-media tweet media-dir)
+              (:quote tweet) (update :quote download-media media-dir))))
          vec)))
 
 (defn download-quote-article-cover

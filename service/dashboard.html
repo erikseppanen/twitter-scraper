@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Twitter archive</title>
+<style>body{font:17px system-ui;max-width:780px;margin:8vh auto;padding:24px;background:#10171c;color:#edf4f6}h1{font-size:38px}p{line-height:1.6;color:#b6c9d0}section{padding:24px;background:#1a262e;border-radius:16px;margin:24px 0}button,a{font:inherit;display:inline-block;padding:12px 16px;border:0;border-radius:8px;margin:6px 8px 6px 0;background:#a6e2cd;color:#102b22;text-decoration:none;cursor:pointer}button:disabled{opacity:.4;cursor:wait}small{display:block;color:#9ab0bd;margin-top:12px}#message{white-space:pre-wrap;overflow-wrap:anywhere}#controls{display:none}</style>
+<h1>Your Twitter archive</h1><p>Your saved likes, with automatic updates every four hours.</p>
+<section><strong id="message">Opening your archive…</strong><small id="dates"></small></section>
+<div id="controls"><a href="/archive/">Browse archive →</a><button id="update">Update now</button><button id="connect">Reconnect X</button><button id="finish">Finish sign-in</button><p>Reconnect X opens a dedicated Chrome window on the Mac Mini. Sign in there, then choose Finish sign-in here.</p></div>
+<script>
+const message = document.querySelector('#message');
+async function status(){const r=await fetch('/api/status');if(!r.ok){message.textContent='Open your private bookmark to access the archive.';return;}const s=await r.json();document.querySelector('#controls').style.display='block';message.textContent=s.message;document.querySelector('#dates').textContent=`Last success: ${s.lastSuccess?new Date(s.lastSuccess).toLocaleString():'Not yet'} · Next check: ${s.paused?'Paused for sign-in':new Date(s.nextRun).toLocaleString()}`;document.querySelector('#update').disabled=s.busy||s.loginPending;document.querySelector('#connect').disabled=s.busy;}
+for(const action of ['update','connect','finish'])document.getElementById(action).onclick=async()=>{try{const r=await fetch('/api/'+action,{method:'POST'});if(!r.ok)message.textContent=(await r.json()).error;else{message.textContent='Working…';setTimeout(status,500);}}catch{message.textContent='Could not reach the Mini.';}};
+async function unlock(){const token=location.hash.slice(1);if(token){history.replaceState(null,'','/');const r=await fetch('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});if(!r.ok){message.textContent='This private link is invalid.';return;}}await status();}
+const showConnectionError=()=>{message.textContent='Could not reach the Mini.';};
+window.addEventListener('hashchange',()=>unlock().catch(showConnectionError));
+unlock().catch(showConnectionError);
+setInterval(()=>status().catch(showConnectionError),5000);
+</script></html>

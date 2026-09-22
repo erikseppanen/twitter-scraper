@@ -1,0 +1,13 @@
+{
+  "name": "twitter-archive-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test.mjs",
+    "test:quotes": "node quote-media-test.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.58.0"
+  }
+}
