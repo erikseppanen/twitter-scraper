@@ -19,6 +19,40 @@ so the service can start.
 
 See the [everyday guide](TUTORIAL.md) for browsing, backups, and recovery.
 
+## Knowledge explorer
+
+Choose **Explore knowledge** on the dashboard, or **Explore related** on any archived
+tweet. This view adds:
+
+- Stable links at `/knowledge/tweet/TWEET_ID`, with **Copy link** and **Copy Org link**.
+  Org links use `[[https://YOUR-HOST/knowledge/tweet/123][description]]`. The host must
+  remain stable for saved links to keep working. Links contain no access credential;
+  a browser without a session is directed to unlock with its private bookmark and then
+  returned to the requested tweet in the same tab.
+- Search by meaning, including quoted text and article titles/previews. A query can
+  match a related idea without sharing its exact words.
+- A graph centered on a selected tweet and up to twelve semantic neighbors. Click a
+  node to explore its neighborhood, use the related-ideas list or keyboard navigation,
+  and pan/zoom or choose **Fit graph**. Edges represent model similarity, not citations.
+- Suggested topic filters. These are approximate classifications from a fixed topic
+  list, not manually curated categories or factual judgments.
+
+The Mini runs a quantized MiniLM embedding model locally through Transformers.js. Model
+weights are downloaded from Hugging Face on first use; tweet text and search queries
+are not sent to an AI provider. The private vector cache and model files live under
+`.service/`. The index checks for archive changes every minute, reuses unchanged vectors,
+and replaces changed/deleted entries. Longer text is split into overlapping chunks.
+During an initial build the explorer shows progress; later rebuilds keep the previous
+index available until the replacement is ready. Failed builds retry automatically.
+
+This first version indexes available text, quoted text, and article previews. It does not
+perform image OCR, video transcription, or full-article text extraction. The model is
+primarily suited to English. Similarity and topic assignments may be imperfect.
+
+For a local feature-branch preview, run `node service/preview-knowledge.mjs` and open the
+bookmark saved in `.service/knowledge-preview/private-link.txt`. This uses the local
+archive and a separate semantic cache; it does not run scraping or modify the archive.
+
 ## Architecture
 
 ```mermaid
@@ -184,6 +218,7 @@ clojure -M:test
 npm ci --prefix service
 npm test --prefix service
 npm --prefix service run test:quotes
+npm --prefix service run test:knowledge
 ```
 
 These cover import/cache behavior, quote extraction and rendering, server access controls,

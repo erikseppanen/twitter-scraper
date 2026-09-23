@@ -1,0 +1,54 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { KnowledgeIndex, contentOf, chunks } from './knowledge.mjs';
+import { createApp } from './server.mjs';
+
+test('incremental semantic index includes quotes, ranks neighbors, and removes deleted records', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'knowledge-'));
+  t.after(() => rm(root, { recursive: true }));
+  await mkdir(path.join(root, 'archive'));
+  const file = path.join(root, 'archive/tweets.json');
+  let calls = [];
+  const embed = async text => { calls.push(text); return /space|orbit|stars/.test(text) ? [1, 0] : [0, 1]; };
+  const tweets = [{ tweetId: '1', text: 'space travel' }, { tweetId: '2', text: 'A quotation', quote: { text: 'orbit among stars' } }, { tweetId: '3', text: 'baking bread' }];
+  await writeFile(file, JSON.stringify(tweets));
+  const index = new KnowledgeIndex(root, path.join(root, '.service'), embed);
+  await index.refresh();
+  assert.equal(index.status.state, 'ready');
+  assert.equal((await index.search('orbit'))[0].tweet.tweetId, '1');
+  assert.deepEqual(index.graph('1').nodes.map(n => n.tweet.tweetId), ['1', '2']);
+  assert.equal(index.graph('missing'), null);
+  assert.match(contentOf(tweets[1]), /orbit/);
+  calls = [];
+  const restarted = new KnowledgeIndex(root, path.join(root, '.service'), embed);
+  await restarted.refresh();
+  assert.ok(!calls.includes('space travel'), 'unchanged tweet embeddings survive restart');
+  await writeFile(file, JSON.stringify([{ ...tweets[0], text: 'changed text' }, tweets[2]]));
+  await restarted.refresh();
+  assert.ok(calls.includes('changed text'));
+  assert.equal(restarted.graph('2'), null);
+  assert.ok(chunks('word '.repeat(900)).length > 1);
+});
+
+test('knowledge routes protect data, deep links preserve destination, and assets cannot escape', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'knowledge-http-'));
+  const knowledge = { rows: [{ tweetId: '1' }], summary: () => ({ state: 'ready' }), search: async () => [], graph: id => id === '1' ? { center: id } : null };
+  const { server, config } = await createApp({ root, stateDir: path.join(root, '.service'), publicOrigin: 'https://archive.example', schedule: false, knowledgeIndex: knowledge });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true }); });
+  const origin = 'http://127.0.0.1:' + server.address().port;
+  assert.equal((await fetch(origin + '/api/knowledge/search?q=private')).status, 401);
+  assert.equal((await fetch(origin + '/knowledge-ui.js')).status, 401);
+  const redirect = await fetch(origin + '/knowledge/tweet/1', { redirect: 'manual' });
+  assert.equal(redirect.status, 302);
+  assert.equal(redirect.headers.get('location'), '/?next=%2Fknowledge%2Ftweet%2F1');
+  const headers = { Cookie: '__Host-archive=' + config.token };
+  assert.equal((await fetch(origin + '/knowledge/tweet/1', { headers })).status, 200);
+  assert.equal((await fetch(origin + '/api/knowledge/graph?id=1', { headers })).status, 200);
+  assert.equal((await fetch(origin + '/api/knowledge/graph?id=9', { headers })).status, 404);
+  assert.equal((await fetch(origin + '/api/knowledge/search?q=' + 'a'.repeat(2001), { headers })).status, 400);
+  assert.equal((await fetch(origin + '/archive/.service/knowledge.json', { headers })).status, 404);
+});

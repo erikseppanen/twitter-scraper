@@ -1,7 +1,9 @@
 # Autonomous archive service
 
 Runs the existing Clojure importer from a Node dashboard and a dedicated Chrome profile.
-No local LLM is required or installed. Updates run every four hours, with an Update now button.
+Updates run every four hours, with an Update now button. Scraping does not require an LLM.
+The knowledge explorer uses a small local embedding model for semantic search and graph
+neighbors. It downloads model weights on first use and keeps tweet text on this machine.
 
 ## Mac Mini installation
 
@@ -87,11 +89,19 @@ then rerun the installer. The installer does not expose the site or alter firewa
 ```sh
 npm ci --prefix service
 npm test --prefix service
+npm --prefix service run test:knowledge
 ```
 
 Tests cover authentication for data and media, CSRF protection, hidden files, path traversal,
 symlink escapes, video ranges, deduplication, and preserving state when browser startup fails.
 Live X collection and restart testing require the deployed Mini and a signed-in X session.
+
+The knowledge browser test uses synthetic posts and the real embedding model to verify
+semantic ranking, authentication return, Org links, graph navigation, and mobile layout.
+First use requires access to Hugging Face to download model weights. Model and vector
+caches are private files under `.service/`; do not commit them. The index refreshes every
+minute independently of the four-hour collection schedule. All knowledge APIs/assets
+require the same authenticated session as the archive. Stable links never embed the token.
 
 The cache loader also recovers paths for media already downloaded by older versions, and
 imports now persist those paths. `clojure -M:test` verifies this migration and incremental
