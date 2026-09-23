@@ -87,9 +87,8 @@ function graph(data) {
     const activate = () => openTweet(node.tweet.tweetId);
     g.onclick = activate; g.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(); } }; group.append(g);
   }
-  let scale = 1, dx = 0, dy = 0, drag;
-  const transform = () => group.setAttribute('transform', `translate(${dx},${dy}) translate(400,220) scale(${scale}) translate(-400,-220)`);
-  svg.onwheel = e => { e.preventDefault(); scale = Math.min(2.5, Math.max(0.6, scale * (e.deltaY > 0 ? 0.9 : 1.1))); transform(); };
+  let dx = 0, dy = 0, drag;
+  const transform = () => group.setAttribute('transform', `translate(${dx},${dy})`);
   svg.onpointerdown = e => { if (!e.target.closest('.node')) { drag = [e.clientX, e.clientY, dx, dy]; svg.setPointerCapture(e.pointerId); } };
   svg.onpointermove = e => { if (drag) { const ratio = 800 / svg.getBoundingClientRect().width; dx = drag[2] + (e.clientX - drag[0]) * ratio; dy = drag[3] + (e.clientY - drag[1]) * ratio; transform(); } };
   svg.onpointerup = svg.onpointercancel = () => { drag = null; };
