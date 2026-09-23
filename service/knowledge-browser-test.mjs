@@ -64,7 +64,11 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: '.service/knowledge-mobile.png', fullPage: true });
   await page.goto(origin + '/archive/');
-  await page.getByRole('link', { name: 'Explore related ↗' }).waitFor();
+  const explorerLink = page.getByRole('link', { name: 'Open in Knowledge Explorer' });
+  await explorerLink.waitFor();
+  assert.equal(await explorerLink.getAttribute('href'), '/knowledge/tweet/1');
+  await explorerLink.click();
+  await page.waitForURL('**/knowledge/tweet/1');
   assert.deepEqual(errors, []);
   console.log('PASS: authentication return, deep links, Org clipboard, graph navigation, back, semantic search, mobile layout, archive integration.');
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true }); }
