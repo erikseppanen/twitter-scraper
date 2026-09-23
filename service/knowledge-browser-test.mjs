@@ -9,7 +9,7 @@ import { createApp } from './server.mjs';
 const root = await mkdtemp(path.join(os.tmpdir(), 'knowledge-browser-'));
 const tweets = [
   ['1', 'Neural networks and machine learning are transforming software development.'],
-  ['2', 'Artificial intelligence can help programmers write and review computer code.'],
+  ['2', 'Artificial intelligence and machine learning can help programmers write and review computer code.'],
   ['3', 'The best sourdough bread needs a healthy starter and a long fermentation.'],
   ['4', 'Baking homemade loaves is about flour, water, yeast, and patience.'],
   ['5', 'Astronauts aboard the space station watch Earth from orbit.'],
@@ -41,6 +41,11 @@ try {
   await page.goto(origin + '/#' + config.token);
   await page.waitForURL('**/knowledge/tweet/1');
   await page.locator('#detail .body').waitFor();
+  assert.equal(await page.locator('#detail > time').getAttribute('datetime'), '2026-01-01T00:00:00.000Z');
+  assert.match(await page.locator('#detail > time').innerText(), /202[56].*ago/);
+  assert.ok(await page.locator('#results .result time').count() > 0);
+  assert.notEqual(await page.locator('#neighborhood-title').innerText(), 'Choose an idea to explore');
+  assert.ok(await page.locator('#neighborhood-themes .badge').count() > 0);
   await page.getByRole('button', { name: 'Copy Org link', exact: true }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   assert.match(copied, /\[\[http:\/\/127\.0\.0\.1:14329\/knowledge\/tweet\/1\]\[/);

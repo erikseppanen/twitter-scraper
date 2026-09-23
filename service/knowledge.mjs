@@ -15,6 +15,29 @@ export function chunks(text) {
   return result;
 }
 export const cosine = (a, b) => a.reduce((sum, value, i) => sum + value * (b[i] || 0), 0);
+const STOP = new Set('a an and are as at be been being but by can could did do does for from get had has have he her here him his how i if in into is it its just like me more most my no not of on one or our out over she so some than that the their them then there these they this those to too up us very was we were what when where which who why will with would you your https http www com pic twitter'.split(' '));
+export function describeNeighborhood(nodes) {
+  const topics = new Map(), phrases = new Map();
+  for (const { tweet, score } of nodes) {
+    if (tweet.topic && tweet.topic !== 'Other') topics.set(tweet.topic, (topics.get(tweet.topic) || 0) + score);
+    const words = contentOf(tweet).toLowerCase().replace(/https?:\/\/\S+|@\w+/g, ' ').match(/[\p{L}][\p{L}'-]*/gu) || [];
+    const seen = new Set();
+    for (let i = 0; i < words.length; i++) {
+      if (STOP.has(words[i]) || words[i].length < 3) continue;
+      seen.add(words[i]);
+      if (words[i + 1] && !STOP.has(words[i + 1]) && words[i + 1].length >= 3) seen.add(words[i] + ' ' + words[i + 1]);
+    }
+    for (const phrase of seen) { const entry = phrases.get(phrase) || { count: 0, score: 0 }; entry.count++; entry.score += score; phrases.set(phrase, entry); }
+  }
+  const ranked = [...phrases].filter(([, value]) => value.count >= Math.min(2, nodes.length))
+    .sort((a, b) => (b[1].score * (b[0].includes(' ') ? 1.8 : 1)) - (a[1].score * (a[0].includes(' ') ? 1.8 : 1)));
+  const themes = [];
+  for (const [phrase] of ranked) {
+    if (!themes.some(t => t.split(' ').some(word => phrase.split(' ').includes(word)))) themes.push(phrase);
+    if (themes.length === 3) break;
+  }
+  return { title: [...topics].sort((a, b) => b[1] - a[1])[0]?.[0] || 'Connected ideas', themes };
+}
 const hash = text => createHash('sha256').update(text).digest('hex');
 function normalize(v) { const n = Math.hypot(...v) || 1; return v.map(x => x / n); }
 
@@ -100,6 +123,6 @@ export class KnowledgeIndex {
       const score = cosine(this.vectors[positions.get(nodes[a].tweet.tweetId)], this.vectors[positions.get(nodes[b].tweet.tweetId)]);
       if (score > 0.5) edges.push({ source: nodes[a].tweet.tweetId, target: nodes[b].tweet.tweetId, score });
     }
-    return { center: id, nodes, edges };
+    return { center: id, nodes, edges, neighborhood: describeNeighborhood(nodes) };
   }
 }

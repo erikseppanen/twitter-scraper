@@ -14,10 +14,22 @@ async function copy(text) {
   catch { const input = element('textarea', undefined, 'copy-fallback'); input.value = text; input.readOnly = true; $('#detail').append(input); input.focus(); input.select(); note('Select and copy the link below.'); }
 }
 function title(tweet) { return '@' + (tweet.user?.screenName || 'unknown') + ': ' + (tweet.text || tweet.quote?.text || 'Saved tweet').replace(/\s+/g, ' ').slice(0, 90); }
+function tweetDate(tweet) {
+  const date = new Date(tweet.createdAt || NaN);
+  if (!Number.isFinite(date.getTime())) return element('span', 'Date unavailable', 'tweet-date muted');
+  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+  const units = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
+  const [unit, size] = units.find(([, size]) => Math.abs(seconds) >= size) || ['second', 1];
+  const age = Math.abs(seconds) < 60 ? 'just now' : new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(Math.trunc(seconds / size), unit);
+  const time = element('time', `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · ${age}`, 'tweet-date muted');
+  time.dateTime = date.toISOString(); time.title = 'Posted ' + date.toLocaleString();
+  return time;
+}
 function card(row) {
   const b = element('button', undefined, 'result' + (row.tweet.tweetId === selected ? ' selected' : ''));
   b.dataset.tweetId = row.tweet.tweetId;
   b.append(element('strong', '@' + (row.tweet.user?.screenName || 'unknown')), element('p', (row.tweet.text || row.tweet.quote?.text || '').slice(0, 190)), element('span', row.tweet.topic, 'badge'));
+  b.append(tweetDate(row.tweet));
   b.onclick = () => openTweet(row.tweet.tweetId); return b;
 }
 async function search() {
@@ -44,20 +56,24 @@ function media(items, container) {
 }
 function detail(data) {
   const t = data.nodes[0].tweet, panel = $('#detail'); panel.replaceChildren();
-  panel.append(element('h2', t.user?.name || t.user?.screenName || 'Saved tweet'), element('span', '@' + (t.user?.screenName || 'unknown') + ' · ' + t.topic, 'muted'), element('p', t.text || '', 'body'));
+  panel.append(element('h2', t.user?.name || t.user?.screenName || 'Saved tweet'), element('span', '@' + (t.user?.screenName || 'unknown') + ' · ' + t.topic, 'muted'), tweetDate(t), element('p', t.text || '', 'body'));
   media(t.media, panel);
-  if (t.quote) { const q = element('div', undefined, 'quote'); q.append(element('strong', '@' + (t.quote.user?.screenName || 'unknown')), element('p', t.quote.text || '', 'body')); media(t.quote.media, q); panel.append(q); }
+  if (t.quote) { const q = element('div', undefined, 'quote'); q.append(element('strong', '@' + (t.quote.user?.screenName || 'unknown')), tweetDate(t.quote), element('p', t.quote.text || '', 'body')); media(t.quote.media, q); panel.append(q); }
   if (t.article) panel.append(element('h3', t.article.title || 'Article'), element('p', t.article.previewText || ''));
   const actions = element('div', undefined, 'actions');
   for (const [label, handler] of [['Copy link', () => copy(urlFor(t.tweetId))], ['Copy Org link', () => copy(`[[${urlFor(t.tweetId)}][${title(t).replace(/[\[\]\r\n]/g, '')}]]`)]]) { const b = element('button', label); b.onclick = handler; actions.append(b); }
   const original = element('a', 'View archived page ↗'); original.href = '/archive/tweets/' + t.tweetId + '.html'; actions.append(original); panel.append(actions);
   const related = element('div', undefined, 'related'); related.append(element('h3', 'Related ideas'));
-  for (const row of data.nodes.slice(1)) { const b = element('button', title(row.tweet)); b.onclick = () => openTweet(row.tweet.tweetId); related.append(b); }
+  for (const row of data.nodes.slice(1)) { const b = element('button', title(row.tweet)); b.append(tweetDate(row.tweet)); b.onclick = () => openTweet(row.tweet.tweetId); related.append(b); }
   if (data.nodes.length === 1) related.append(element('p', 'No close semantic neighbors found yet.'));
   panel.append(related);
 }
 function svgElement(tag, attrs = {}) { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; }
 function graph(data) {
+  $('#neighborhood-title').textContent = data.neighborhood?.title || 'Semantic neighborhood';
+  const themes = data.neighborhood?.themes || [];
+  $('#neighborhood-themes').replaceChildren(...themes.map(theme => element('span', theme, 'badge')));
+  $('#neighborhood-caption').textContent = themes.length ? 'Shared themes in this neighborhood' : 'A suggested topic for these connected tweets';
   graphData = data; const svg = svgElement('svg', { viewBox: '0 0 800 440', role: 'group', 'aria-label': 'Related tweet graph. Use Tab and Enter to navigate nodes.' });
   const group = svgElement('g'); svg.append(group);
   const points = new Map(data.nodes.map((n, i) => { const angle = (i - 1) * 2 * Math.PI / Math.max(1, data.nodes.length - 1); const radius = 125 + (1 - n.score) * 100; return [n.tweet.tweetId, i ? [400 + Math.cos(angle) * radius * 1.35, 220 + Math.sin(angle) * radius * 0.78] : [400, 220]]; }));
@@ -67,7 +83,7 @@ function graph(data) {
     const g = svgElement('g', { transform: `translate(${x},${y})`, class: 'node' + (center ? ' center' : ''), tabindex: '0', role: 'button', 'aria-label': title(node.tweet) });
     g.append(svgElement('circle', { r: center ? 21 : 12 + node.score * 7 }));
     const label = svgElement('text', { y: 38, 'text-anchor': 'middle' }); label.textContent = (node.tweet.text || node.tweet.quote?.text || 'Saved tweet').replace(/\s+/g, ' ').slice(0, 29) + '…'; g.append(label);
-    const tooltip = svgElement('title'); tooltip.textContent = title(node.tweet); g.append(tooltip);
+    const tooltip = svgElement('title'); tooltip.textContent = title(node.tweet) + '\n' + tweetDate(node.tweet).textContent; g.append(tooltip);
     const activate = () => openTweet(node.tweet.tweetId);
     g.onclick = activate; g.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(); } }; group.append(g);
   }
