@@ -53,11 +53,13 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
       const cookies = Object.fromEntries((req.headers.cookie || '').split(';').map(c => c.trim().split('=')));
       const authorized = equal(cookies[cookieName], config.token);
       if (req.method === 'GET' && url.pathname === '/') return reply(200, dashboard, 'text/html; charset=utf-8');
+      const tweetPage = /^\/tweet\/\d+$/.test(url.pathname);
       const knowledgePage = url.pathname === '/knowledge' || /^\/knowledge\/tweet\/\d+$/.test(url.pathname);
-      if (!authorized && req.method === 'GET' && knowledgePage) {
+      if (!authorized && req.method === 'GET' && (knowledgePage || tweetPage || url.pathname.startsWith('/archive/'))) {
         res.writeHead(302, { Location: '/?next=' + encodeURIComponent(url.pathname + url.search) }); return res.end();
       }
       if (!authorized) return reply(401, { error: 'Open your private bookmark to access the archive.' });
+      if (req.method === 'GET' && tweetPage) return reply(200, '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tweet — Twitter Likes Archive</title><link rel="stylesheet" href="/archive/style.css"></head><body><header class="page-header"><h1>Twitter Likes Archive</h1></header><main></main><script>document.documentElement.dataset.theme=localStorage.getItem("theme") || (matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script><script src="/knowledge-links.js"></script></body></html>', 'text/html; charset=utf-8');
       if (req.method === 'GET' && knowledgePage) return reply(200, assets.get('knowledge.html'), 'text/html; charset=utf-8');
       if (req.method === 'GET' && ['/knowledge.css', '/knowledge-ui.js', '/knowledge-links.js'].includes(url.pathname)) return reply(200, assets.get(url.pathname.slice(1)), mime[path.extname(url.pathname)]);
       if (req.method === 'GET' && url.pathname === '/api/knowledge/status') return reply(200, knowledge.summary());

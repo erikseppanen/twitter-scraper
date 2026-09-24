@@ -1,12 +1,7 @@
 (() => {
   const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
   const style = el('style');
-  style.textContent = `
-.related-open{padding-right:50%}.related-panel{position:fixed;right:16px;top:170px;bottom:16px;width:calc(50% - 32px);max-width:600px;overflow:auto;background:var(--bg-card,#fff);color:var(--text-primary,#111);border:1px solid var(--border-color,#ddd);border-radius:16px;padding:0;z-index:20;box-sizing:border-box}
-.related-panel h2{font-size:20px;margin:12px 0}.related-tools{display:flex;gap:8px;flex-wrap:wrap}.related-panel button,.knowledge-link{font:inherit;font-size:13px;color:var(--link-color,#1d9bf0);background:transparent;border:1px solid var(--border-color,#ddd);border-radius:8px;padding:7px 10px;cursor:pointer}.knowledge-link{margin-left:8px;text-decoration:none}
-.related-panel>.related-tools,.related-panel>h2,.related-panel>p{margin:12px}.related-card{margin-bottom:16px}.related-card>.related-tools{padding:0 16px 12px}.related-card .tweet-card{margin:0}.related-card .tweet-text{overflow-wrap:anywhere}
-@media(max-width:760px){.related-open{padding-right:0}.related-panel{position:static;width:auto;margin:12px 0;max-height:none}}
-`;
+  style.textContent = `.related-panel{max-width:600px;margin:auto;padding:16px}.related-tools{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}.related-tools a,.knowledge-link,.copy-tweet-link{font:inherit;font-size:13px;color:var(--link-color,#1d9bf0);background:transparent;border:0;padding:4px;cursor:pointer}.related-card{margin-bottom:16px}.related-panel h2{font-size:20px;margin:20px 0}.related-card .tweet-text{overflow-wrap:anywhere}`;
   style.textContent += '.tweet-card .tweet-top-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:0;border-bottom:1px solid var(--border-color,#ddd);padding:0 0 12px;margin:0 0 12px}.tweet-card .tweet-source-footer{display:flex;justify-content:flex-end;border-top:1px solid var(--border-color,#ddd);padding-top:12px;margin-top:12px}.tweet-card .tweet-source-link{font-size:14px;color:var(--link-color,#1d9bf0);text-decoration:none}';
   document.head.append(style);
   function arrange(c) {
@@ -17,9 +12,9 @@
     if (source) { source.className = 'tweet-source-link'; source.textContent = 'View on X ↗'; source.title = 'View original tweet on X'; const bottom = el('footer', null, 'tweet-source-footer'); bottom.append(source); c.append(bottom); }
   }
   const panel = el('aside', null, 'related-panel'); panel.setAttribute('aria-label', 'Related tweets'); panel.hidden = true;
-  let trail = [], sequence = 0, anchor;
+  let sequence = 0;
   const button = (text, fn) => { const b = el('button', text); b.type = 'button'; b.onclick = fn; return b; };
-  const linkFor = id => location.origin + '/archive/?related=' + encodeURIComponent(id);
+  const linkFor = id => location.origin + '/tweet/' + encodeURIComponent(id);
   const notice = el('p'); notice.setAttribute('role', 'status');
   function media(tweet, target) {
     const grid = el('div', null, 'media-grid media-count-' + Math.min(4, (tweet.media || []).length));
@@ -52,24 +47,24 @@
     footer.append(el('time', Number.isFinite(+d) ? d.toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) : 'Date unavailable', 'tweet-date'));
     const a = el('a', 'View page →', 'tweet-page-link'); a.href = '/archive/tweets/' + tweet.tweetId + '.html'; a.target = '_blank'; a.rel = 'noopener'; footer.append(a); t.append(footer); c.append(t);
     const actions = el('div', null, 'related-tools');
-    if (!selected) actions.append(button('Follow connections →', () => open(tweet.tweetId)));
+    if (!selected) { const related = el('a', 'Related →'); related.href = linkFor(tweet.tweetId); footer.append(related); }
     actions.append(button('Copy link', async () => { try { await navigator.clipboard.writeText(linkFor(tweet.tweetId)); notice.textContent = 'Link copied.'; } catch { notice.textContent = linkFor(tweet.tweetId); } }));
-    arrange(t); c.append(actions); return c;
+    footer.append(...actions.childNodes); arrange(t); return c;
   }
-  async function open(id, back = false) {
-    const seq = ++sequence; if (!back) trail.push(id);
-    if (!panel.isConnected) { if (anchor) anchor.after(panel); else (document.querySelector('main') || document.body).prepend(panel); }
-    panel.hidden = false; document.body.classList.add('related-open');
-    const tools = el('div', null, 'related-tools');
-    const prev = button('← Back', () => { trail.pop(); open(trail.at(-1), true); }); prev.disabled = trail.length < 2;
-    tools.append(prev, button('Close', () => { ++sequence; panel.hidden = true; document.body.classList.remove('related-open'); history.replaceState(null, '', location.pathname); }));
-    panel.replaceChildren(tools, el('h2', 'Related tweets'), notice); notice.textContent = 'Finding related tweets…';
-    history.replaceState(null, '', '?related=' + encodeURIComponent(id));
+  async function open(id) {
+    const seq = ++sequence;
+    (document.querySelector('main') || document.body).append(panel);
+    panel.hidden = false;
+    const tools = el('nav', null, 'related-tools');
+    const timeline = el('a', '← Back to timeline'); timeline.href = '/archive/'; tools.append(timeline);
+    panel.replaceChildren(tools, notice); notice.textContent = 'Finding related tweets…';
     try {
       const response = await fetch('/api/knowledge/graph?id=' + encodeURIComponent(id));
       const data = await response.json(); if (!response.ok) throw Error(data.error || 'Unable to load related tweets.');
       if (seq !== sequence) return;
-      notice.textContent = data.neighborhood?.title || 'Connected ideas';
+      notice.textContent = '';
+      document.title = (data.nodes[0].tweet.user?.name || 'Tweet') + ' — Twitter Likes Archive';
+      panel.append(card(data.nodes[0].tweet, true), el('h2', 'Related tweets'));
       panel.dataset.centerId = id;
       for (const node of data.nodes.slice(1, 7)) panel.append(card(node.tweet));
       if (data.nodes.length === 1) panel.append(el('p', 'No close semantic neighbors found yet.'));
@@ -81,11 +76,14 @@
       if (c.querySelector('.knowledge-link')) { arrange(c); continue; }
       const id = c.id.slice(6); if (!/^\d+$/.test(id)) continue;
       const a = el('a', 'Related ↗', 'knowledge-link'); a.href = linkFor(id); a.title = 'Explore related tweets';
-      a.onclick = event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); anchor = c; trail = []; c.after(panel); open(id); };
+      const copy = button('Copy link', async () => { try { await navigator.clipboard.writeText(linkFor(id)); copy.textContent = 'Copied'; } catch { window.prompt('Copy tweet URL', linkFor(id)); } }); copy.className = 'copy-tweet-link';
+      (c.querySelector('footer') || c).append(copy);
       (c.querySelector('footer') || c).append(a);
       arrange(c);
     }
   }
   enhance(); new MutationObserver(enhance).observe(document.body, { childList:true, subtree:true });
-  const initial = new URLSearchParams(location.search).get('related'); if (/^\d+$/.test(initial || '')) open(initial);
+  const initial = location.pathname.match(/^\/tweet\/(\d+)$/)?.[1];
+  if (initial) open(initial);
+  else { const legacy = new URLSearchParams(location.search).get('related'); if (/^\d+$/.test(legacy || '')) location.replace(linkFor(legacy)); }
 })();
