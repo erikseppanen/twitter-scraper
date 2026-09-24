@@ -7,7 +7,15 @@
 .related-panel>.related-tools,.related-panel>h2,.related-panel>p{margin:12px}.related-card{margin-bottom:16px}.related-card>.related-tools{padding:0 16px 12px}.related-card .tweet-card{margin:0}.related-card .tweet-text{overflow-wrap:anywhere}
 @media(max-width:760px){.related-open{padding-right:0}.related-panel{position:static;width:auto;margin:12px 0;max-height:none}}
 `;
+  style.textContent += '.tweet-card .tweet-top-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:0;border-bottom:1px solid var(--border-color,#ddd);padding:0 0 12px;margin:0 0 12px}.tweet-card .tweet-source-footer{display:flex;justify-content:flex-end;border-top:1px solid var(--border-color,#ddd);padding-top:12px;margin-top:12px}.tweet-card .tweet-source-link{font-size:14px;color:var(--link-color,#1d9bf0);text-decoration:none}';
   document.head.append(style);
+  function arrange(c) {
+    if (c.querySelector('.tweet-top-actions')) return;
+    const top = c.querySelector('.tweet-footer');
+    if (top) { top.classList.add('tweet-top-actions'); c.prepend(top); }
+    const source = c.querySelector('.tweet-link');
+    if (source) { source.className = 'tweet-source-link'; source.textContent = 'View on X ↗'; source.title = 'View original tweet on X'; const bottom = el('footer', null, 'tweet-source-footer'); bottom.append(source); c.append(bottom); }
+  }
   const panel = el('aside', null, 'related-panel'); panel.setAttribute('aria-label', 'Related tweets'); panel.hidden = true;
   let trail = [], sequence = 0, anchor;
   const button = (text, fn) => { const b = el('button', text); b.type = 'button'; b.onclick = fn; return b; };
@@ -46,7 +54,7 @@
     const actions = el('div', null, 'related-tools');
     if (!selected) actions.append(button('Follow connections →', () => open(tweet.tweetId)));
     actions.append(button('Copy link', async () => { try { await navigator.clipboard.writeText(linkFor(tweet.tweetId)); notice.textContent = 'Link copied.'; } catch { notice.textContent = linkFor(tweet.tweetId); } }));
-    c.append(actions); return c;
+    arrange(t); c.append(actions); return c;
   }
   async function open(id, back = false) {
     const seq = ++sequence; if (!back) trail.push(id);
@@ -70,11 +78,12 @@
   }
   function enhance() {
     for (const c of document.querySelectorAll('article[id^="tweet-"]')) {
-      if (c.querySelector('.knowledge-link')) continue;
+      if (c.querySelector('.knowledge-link')) { arrange(c); continue; }
       const id = c.id.slice(6); if (!/^\d+$/.test(id)) continue;
       const a = el('a', 'Related ↗', 'knowledge-link'); a.href = linkFor(id); a.title = 'Explore related tweets';
       a.onclick = event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); anchor = c; trail = []; c.after(panel); open(id); };
       (c.querySelector('footer') || c).append(a);
+      arrange(c);
     }
   }
   enhance(); new MutationObserver(enhance).observe(document.body, { childList:true, subtree:true });
