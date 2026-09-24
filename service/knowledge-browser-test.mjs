@@ -64,11 +64,20 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: '.service/knowledge-mobile.png', fullPage: true });
   await page.goto(origin + '/archive/');
-  const explorerLink = page.getByRole('link', { name: 'Open in Knowledge Explorer' });
-  await explorerLink.waitFor();
-  assert.equal(await explorerLink.getAttribute('href'), '/knowledge/tweet/1');
-  await explorerLink.click();
-  await page.waitForURL('**/knowledge/tweet/1');
+  const relatedLink = page.getByRole('link', { name: 'Related ↗', exact: true });
+  await relatedLink.click();
+  await page.locator('.related-card').first().waitFor();
+  assert.equal(await page.locator('.related-card').first().getAttribute('data-tweet-id'), '1');
+  await page.getByRole('button', { name: 'Follow connections →' }).first().click();
+  await page.waitForFunction(() => document.querySelector('.related-card')?.dataset.tweetId !== '1');
+  await page.getByRole('button', { name: '← Back', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('.related-card')?.dataset.tweetId === '1');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.reload();
+  await page.locator('.related-card').first().waitFor();
+  assert.equal(await page.locator('.related-card').first().getAttribute('data-tweet-id'), '1');
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  assert.equal(await page.locator('.related-panel').isVisible(), false);
   assert.deepEqual(errors, []);
   console.log('PASS: authentication return, deep links, Org clipboard, graph navigation, back, semantic search, mobile layout, archive integration.');
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true }); }
