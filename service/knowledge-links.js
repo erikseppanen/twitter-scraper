@@ -70,7 +70,7 @@
       const data = await response.json(); if (!response.ok) throw Error(data.error || 'Unable to load related tweets.');
       if (seq !== sequence) return;
       notice.textContent = data.neighborhood?.title || 'Connected ideas';
-      panel.append(card(data.nodes[0].tweet, true), el('h2', 'Follow a connection'));
+      panel.dataset.centerId = id;
       for (const node of data.nodes.slice(1, 7)) panel.append(card(node.tweet));
       if (data.nodes.length === 1) panel.append(el('p', 'No close semantic neighbors found yet.'));
       panel.scrollTop = 0;
