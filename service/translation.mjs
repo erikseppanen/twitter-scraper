@@ -8,13 +8,26 @@ export function detect(text) {
   const clean = text.replace(/https?:\/\/\S+|[@#]\w+/g, '').trim();
   if (/[\u3040-\u30ff]/.test(clean)) return languages.jpn;
   if (/[\uac00-\ud7af]/.test(clean)) return languages.kor;
+  // Long posts can flatten whole-document trigram scores. Use agreement
+  // between confidently identified sentences before falling back to the whole.
+  const votes = new Map();
+  let total = 0;
+  for (const { segment } of new Intl.Segmenter(undefined, { granularity: 'sentence' }).segment(clean)) {
+    if (segment.trim().length < 25) continue;
+    const ranks = francAll(segment, { minLength: 25 });
+    const [code, value] = ranks[0];
+    total++;
+    if (code !== 'und' && (!ranks[1] || value - ranks[1][1] >= 0.08)) votes.set(code, (votes.get(code) || 0) + 1);
+  }
+  const winner = [...votes].sort((a,b) => b[1]-a[1])[0];
+  if (winner && winner[1] >= 2 && winner[1] / total >= 0.6) return languages[winner[0]] || null;
   const ranked = francAll(clean, { minLength: 35 });
   const [best, score] = ranked[0];
   if (best === 'eng' || best === 'und') return null;
   // These are relative trigram scores, not probabilities. Prefer leaving the
   // original intact when English is plausible or the leading guesses are close.
   const english = ranked.find(([code]) => code === 'eng')?.[1];
-  if (english !== undefined && score - english < 0.2) return null;
+  if (english !== undefined && score - english < 0.1) return null;
   if (ranked[1] && score - ranked[1][1] < 0.08) return null;
   return languages[best] || null;
 }
