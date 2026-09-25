@@ -4,12 +4,13 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test.mjs knowledge-test.mjs",
+    "test": "node --test test.mjs knowledge-test.mjs translation-test.mjs",
     "test:quotes": "node quote-media-test.mjs",
     "test:knowledge": "node knowledge-browser-test.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.0",
+    "franc-min": "^6.2.0",
     "playwright": "^1.58.0"
   }
 }

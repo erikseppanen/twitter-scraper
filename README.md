@@ -228,3 +228,7 @@ for collection fixtures, login persistence, and checks against a running deploym
 ## License
 
 MIT
+
+### Automatic English translation
+
+The served archive automatically translates supported non-English tweet and quoted-tweet text as it becomes visible. A “Show original” toggle preserves access to the saved source. Translation runs locally with the NLLB-200 distilled model; its weights download on first use, so the first translation can take longer. Results are cached by source text and model in the private service state directory and are regenerated when text changes. Original archive data is not rewritten. Images, video subtitles, and full articles are not translated. Language detection is approximate, especially for short or mixed-language text; unrecognized languages remain in their original form. The translation model is provided under CC-BY-NC-4.0 (see https://huggingface.co/Xenova/nllb-200-distilled-600M).

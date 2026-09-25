@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker, atomicJSON } from './worker.mjs';
 import { KnowledgeIndex } from './knowledge.mjs';
+import { Translations } from './translation.mjs';
 
 export function equal(a, b) {
   return typeof a === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -27,8 +28,9 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
   const secure = publicOrigin.startsWith('https:');
   const cookieName = secure ? '__Host-archive' : 'archive';
   const dashboard = await readFile(new URL('./dashboard.html', import.meta.url));
+  const translations = new Translations(root, stateDir);
   const knowledge = knowledgeIndex || new KnowledgeIndex(root, stateDir);
-  const assets = new Map(await Promise.all(['knowledge.html', 'knowledge.css', 'knowledge-ui.js', 'knowledge-links.js'].map(async name => [name, await readFile(new URL('./' + name, import.meta.url))])));
+  const assets = new Map(await Promise.all(['knowledge.html', 'knowledge.css', 'knowledge-ui.js', 'knowledge-links.js', 'translation-ui.js'].map(async name => [name, await readFile(new URL('./' + name, import.meta.url))])));
   if (indexKnowledge) void knowledge.refresh();
   const knowledgeTimer = indexKnowledge ? setInterval(() => { void knowledge.refresh(); }, 60000) : null;
   const server = http.createServer(async (req, res) => {
@@ -61,7 +63,12 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
       if (!authorized) return reply(401, { error: 'Open your private bookmark to access the archive.' });
       if (req.method === 'GET' && tweetPage) { res.writeHead(302, { Location: '/archive/?related=' + url.pathname.split('/').at(-1) }); return res.end(); }
       if (req.method === 'GET' && knowledgePage) return reply(200, assets.get('knowledge.html'), 'text/html; charset=utf-8');
-      if (req.method === 'GET' && ['/knowledge.css', '/knowledge-ui.js', '/knowledge-links.js'].includes(url.pathname)) return reply(200, assets.get(url.pathname.slice(1)), mime[path.extname(url.pathname)]);
+      if (req.method === 'GET' && ['/knowledge.css', '/knowledge-ui.js', '/knowledge-links.js', '/translation-ui.js'].includes(url.pathname)) return reply(200, assets.get(url.pathname.slice(1)), mime[path.extname(url.pathname)]);
+      if (req.method === 'GET' && url.pathname === '/api/translation') {
+        const id = url.searchParams.get('id');
+        if (!/^\d+$/.test(id || '')) return reply(400, { error: 'Invalid tweet ID' });
+        return reply(200, await translations.get(id, url.searchParams.get('quote') === '1'));
+      }
       if (req.method === 'GET' && url.pathname === '/api/knowledge/status') return reply(200, knowledge.summary());
       if (req.method === 'GET' && ['/api/knowledge/search', '/api/knowledge/graph'].includes(url.pathname)) {
         if (!knowledge.rows.length) return reply(503, { error: knowledge.status.message });
@@ -92,7 +99,7 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
       if (!info.isFile() || !mime[path.extname(file)]) return reply(404, { error: 'Not found' });
       // Add knowledge actions to previously generated archives without rebuilding stored files.
       if (path.extname(file) === '.html' && req.method === 'GET') {
-        const html = (await readFile(file, 'utf8')).replace('</body>', '<script src="/knowledge-links.js"></script></body>');
+        const html = (await readFile(file, 'utf8')).replace('</body>', '<script src="/knowledge-links.js"></script><script src="/translation-ui.js"></script></body>');
         return reply(200, html, mime['.html']);
       }
       let start = 0, end = info.size - 1, code = 200;

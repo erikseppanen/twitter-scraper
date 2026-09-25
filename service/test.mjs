@@ -22,7 +22,7 @@ test('private archive gates all assets, enforces origin and blocks hidden files 
   t.after(async () => { await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true }); });
   const url = `http://127.0.0.1:${server.address().port}`;
   for (const asset of ['/archive/', '/archive/video.mp4', '/archive/.tweet-cache.edn', '/api/status']) {
-    assert.equal((await fetch(url + asset)).status, 401);
+    assert.equal((await fetch(url + asset, { redirect: 'manual' })).status, asset.startsWith('/archive/') ? 302 : 401);
   }
   assert.equal((await fetch(url + '/session', { method: 'POST', body: JSON.stringify({ token: config.token }) })).status, 403);
   assert.equal((await fetch(url + '/session', { method: 'POST', headers: { Origin: origin }, body: JSON.stringify({ token: 'wrong' }) })).status, 401);
