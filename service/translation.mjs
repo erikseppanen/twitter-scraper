@@ -1,14 +1,22 @@
 import { readFile, mkdir, rename, writeFile, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { franc } from 'franc-min';
+import { francAll } from 'franc-min';
 export const MODEL = 'Xenova/nllb-200-distilled-600M';
 const languages = { spa:['spa_Latn','Spanish'],jpn:['jpn_Jpan','Japanese'],fra:['fra_Latn','French'],deu:['deu_Latn','German'],por:['por_Latn','Portuguese'],ita:['ita_Latn','Italian'],rus:['rus_Cyrl','Russian'],ukr:['ukr_Cyrl','Ukrainian'],cmn:['zho_Hans','Chinese'],kor:['kor_Hang','Korean'],arb:['arb_Arab','Arabic'],hin:['hin_Deva','Hindi'],nld:['nld_Latn','Dutch'],tur:['tur_Latn','Turkish'],pol:['pol_Latn','Polish'],swe:['swe_Latn','Swedish'],ind:['ind_Latn','Indonesian'],vie:['vie_Latn','Vietnamese'],tha:['tha_Thai','Thai'],heb:['heb_Hebr','Hebrew'],ces:['ces_Latn','Czech'],ron:['ron_Latn','Romanian'],fin:['fin_Latn','Finnish'],dan:['dan_Latn','Danish'],ell:['ell_Grek','Greek'] };
 export function detect(text) {
   const clean = text.replace(/https?:\/\/\S+|[@#]\w+/g, '').trim();
   if (/[\u3040-\u30ff]/.test(clean)) return languages.jpn;
   if (/[\uac00-\ud7af]/.test(clean)) return languages.kor;
-  return languages[franc(clean, { minLength: 15 })] || null;
+  const ranked = francAll(clean, { minLength: 35 });
+  const [best, score] = ranked[0];
+  if (best === 'eng' || best === 'und') return null;
+  // These are relative trigram scores, not probabilities. Prefer leaving the
+  // original intact when English is plausible or the leading guesses are close.
+  const english = ranked.find(([code]) => code === 'eng')?.[1];
+  if (english !== undefined && score - english < 0.2) return null;
+  if (ranked[1] && score - ranked[1][1] < 0.08) return null;
+  return languages[best] || null;
 }
 export class Translations {
   constructor(root, stateDir, translate) { Object.assign(this,{root,stateDir,translate}); this.pending=new Map(); this.queue=Promise.resolve(); }
