@@ -68,6 +68,40 @@
       (is (= "https://example.invalid/mountain.jpg"
              (get-in (fetcher/combine-quote body extra) [:media 0 :url]))))))
 
+(deftest removal-deletes-unshared-files-and-blocks-reimport
+  (let [dir (.toFile (java.nio.file.Files/createTempDirectory "archive-remove" (make-array java.nio.file.attribute.FileAttribute 0)))
+        output (.getPath dir)
+        ids (str output "/remove.txt")
+        file #(io/file output %)
+        quote {:tweet-id "99" :text "Quoted" :media [{:type :photo :url "https://example.invalid/99_0.jpg" :local-path "99_0.jpg"}]}]
+    (try
+      (doseq [d ["media" "tweets" "articles"]] (.mkdir (file d)))
+      (doseq [f ["media/10_0.jpg" "media/99_0.jpg" "media/20_0.jpg" "tweets/10.html" "tweets/20.html"
+                 "articles/10.html" "articles/10-cover.jpg" "articles/99.html"]]
+        (spit (file f) "x"))
+      (core/save-cache [{:tweet-id "10" :text "Remove me" :media [{:type :photo :url "https://example.invalid/10_0.jpg" :local-path "10_0.jpg"}] :quote quote}
+                        {:tweet-id "20" :text "Keep me" :media [{:type :photo :url "https://example.invalid/20_0.jpg" :local-path "20_0.jpg"}] :quote quote}]
+                       output)
+      (spit ids "10\n")
+      (core/run-remove {:output output :remove ids})
+      (is (= ["20"] (map :tweet-id (core/load-cache output))))
+      (is (= "10\n" (slurp (file ".removed-ids"))))
+      (doseq [f ["media/10_0.jpg" "tweets/10.html" "articles/10.html" "articles/10-cover.jpg"]]
+        (is (not (.exists (file f))) f))
+      ;; The kept tweet quotes the same tweet, so its shared files stay.
+      (doseq [f ["media/99_0.jpg" "media/20_0.jpg" "tweets/20.html" "articles/99.html"]]
+        (is (.exists (file f)) f))
+      (let [fetched (atom nil)]
+        (spit ids "10\n30\n")
+        (with-redefs [fetcher/fetch-tweets-batch (fn [ids _] (reset! fetched ids) {"30" {:tweet-id "30" :text "New"}})
+                      fetcher/download-all-media (fn [tweets _ _] tweets)
+                      fetcher/download-all-article-media (fn [tweets _] tweets)]
+          (core/run-import {:output output :import ids :delay 0}))
+        (is (= ["30"] @fetched))
+        (is (= #{"20" "30"} (set (map :tweet-id (core/load-cache output))))))
+      (finally
+        (doseq [f (reverse (file-seq dir))] (io/delete-file f))))))
+
 (defn -main [& _]
   (let [result (run-tests 'twitter-scraper.core-test)]
     (shutdown-agents)

@@ -25,12 +25,18 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
   state.running = false;
   const save = () => atomicJSON(path.join(stateDir, 'status.json'), state);
   const worker = workerFactory ? workerFactory(state) : new Worker(root, stateDir, save, state);
+  // Removed IDs stay hidden immediately and are never re-imported; the worker purges their files.
+  const removedFile = path.join(stateDir, 'removed.json');
+  try { worker.removed = new Set(JSON.parse(await readFile(removedFile, 'utf8'))); }
+  catch (e) { if (e.code !== 'ENOENT') throw e; worker.removed = new Set(); }
+  const removed = worker.removed;
+  const purge = () => { if (!worker.busy) worker.purge().catch(() => {}); };
   const secure = publicOrigin.startsWith('https:');
   const cookieName = secure ? '__Host-archive' : 'archive';
   const dashboard = await readFile(new URL('./dashboard.html', import.meta.url));
   const translations = new Translations(root, stateDir);
   const knowledge = knowledgeIndex || new KnowledgeIndex(root, stateDir);
-  const assets = new Map(await Promise.all(['knowledge.html', 'knowledge.css', 'knowledge-ui.js', 'knowledge-links.js', 'translation-ui.js'].map(async name => [name, await readFile(new URL('./' + name, import.meta.url))])));
+  const assets = new Map(await Promise.all(['knowledge.html', 'knowledge.css', 'knowledge-ui.js', 'knowledge-links.js', 'translation-ui.js', 'archive-remove.js'].map(async name => [name, await readFile(new URL('./' + name, import.meta.url))])));
   if (indexKnowledge) void knowledge.refresh();
   const knowledgeTimer = indexKnowledge ? setInterval(() => { void knowledge.refresh(); }, 60000) : null;
   const server = http.createServer(async (req, res) => {
@@ -63,7 +69,7 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
       if (!authorized) return reply(401, { error: 'Open your private bookmark to access the archive.' });
       if (req.method === 'GET' && tweetPage) { res.writeHead(302, { Location: '/archive/?related=' + url.pathname.split('/').at(-1) }); return res.end(); }
       if (req.method === 'GET' && knowledgePage) return reply(200, assets.get('knowledge.html'), 'text/html; charset=utf-8');
-      if (req.method === 'GET' && ['/knowledge.css', '/knowledge-ui.js', '/knowledge-links.js', '/translation-ui.js'].includes(url.pathname)) return reply(200, assets.get(url.pathname.slice(1)), mime[path.extname(url.pathname)]);
+      if (req.method === 'GET' && ['/knowledge.css', '/knowledge-ui.js', '/knowledge-links.js', '/translation-ui.js', '/archive-remove.js'].includes(url.pathname)) return reply(200, assets.get(url.pathname.slice(1)), mime[path.extname(url.pathname)]);
       if (req.method === 'GET' && url.pathname === '/api/translation') {
         const id = url.searchParams.get('id');
         if (!/^\d+$/.test(id || '')) return reply(400, { error: 'Invalid tweet ID' });
@@ -75,10 +81,18 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
         if (url.pathname.endsWith('/search')) {
           const query = url.searchParams.get('q') || '';
           if (query.length > 2000) return reply(400, { error: 'Search is limited to 2,000 characters.' });
-          return reply(200, { results: await knowledge.search(query, url.searchParams.get('topic')) });
+          const results = await knowledge.search(query, url.searchParams.get('topic'));
+          return reply(200, { results: results.filter(r => !removed.has(r.tweet.tweetId)) });
         }
-        const graph = knowledge.graph(url.searchParams.get('id'));
-        return graph ? reply(200, graph) : reply(404, { error: 'Tweet not found in the semantic index.' });
+        const id = url.searchParams.get('id');
+        const graph = removed.has(id) ? null : knowledge.graph(id);
+        if (!graph) return reply(404, { error: 'Tweet not found in the semantic index.' });
+        // The index drops removed tweets on its next refresh; hide them until then.
+        if (removed.size) {
+          graph.nodes = graph.nodes.filter(n => !removed.has(n.tweet.tweetId));
+          graph.edges = graph.edges.filter(e => !removed.has(e.source) && !removed.has(e.target));
+        }
+        return reply(200, graph);
       }
       if (req.method === 'GET' && url.pathname === '/api/status') return reply(200, { ...state, busy: worker.busy });
       if (req.method === 'POST' && ['/api/update', '/api/connect', '/api/finish'].includes(url.pathname)) {
@@ -88,19 +102,39 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
         worker[action]().catch(async e => { state.error = e.message; state.message = e.message; await save(); });
         return reply(202, { ok: true });
       }
+      if (req.method === 'POST' && url.pathname === '/api/remove') {
+        let body = '';
+        for await (const chunk of req) { body += chunk; if (body.length > 1024) return reply(413, { error: 'Too large' }); }
+        const id = String(JSON.parse(body).id || '');
+        if (!/^\d+$/.test(id)) return reply(400, { error: 'Invalid tweet ID' });
+        if (!removed.has(id)) {
+          removed.add(id);
+          await atomicJSON(removedFile, [...removed]);
+          state.removalPending = true; state.removalRetryAt = null; await save();
+        }
+        purge();
+        return reply(202, { ok: true });
+      }
       if (!['GET', 'HEAD'].includes(req.method)) return reply(405, { error: 'Method not allowed' });
       if (!url.pathname.startsWith('/archive/')) return reply(404, { error: 'Not found' });
       const relative = decodeURIComponent(url.pathname.slice('/archive/'.length)) || 'index.html';
       if (relative.split('/').some(part => part.startsWith('.')) || relative.includes('\\')) return reply(404, { error: 'Not found' });
+      if (removed.has(/^(?:tweets|articles|media)\/(\d+)[._-]/.exec(relative)?.[1])) return reply(404, { error: 'Not found' });
       const archive = await realpath(path.join(root, 'archive'));
       const file = await realpath(path.resolve(archive, relative));
       if (!file.startsWith(archive + path.sep)) return reply(404, { error: 'Not found' });
       const info = await stat(file);
       if (!info.isFile() || !mime[path.extname(file)]) return reply(404, { error: 'Not found' });
-      // Add knowledge actions to previously generated archives without rebuilding stored files.
+      // Add knowledge and removal actions to previously generated archives without rebuilding stored files.
       if (path.extname(file) === '.html' && req.method === 'GET') {
-        const html = (await readFile(file, 'utf8')).replace('</body>', '<script src="/knowledge-links.js"></script><script src="/translation-ui.js"></script></body>');
+        // The index embeds its data; drop removed tweets as the page assigns it.
+        const hide = `<script>(()=>{const r=new Set(${JSON.stringify([...removed])});let d;Object.defineProperty(window,'TWEET_DATA',{configurable:true,get:()=>d,set:v=>{d=Array.isArray(v)?v.filter(t=>!r.has(String(t.tweetId))):v;}});})();</script>`;
+        const html = (await readFile(file, 'utf8')).replace('</head>', hide + '</head>').replace('</body>', '<script src="/knowledge-links.js"></script><script src="/translation-ui.js"></script><script src="/archive-remove.js"></script></body>');
         return reply(200, html, mime['.html']);
+      }
+      if (relative === 'tweets.json' && req.method === 'GET' && removed.size) {
+        const tweets = JSON.parse(await readFile(file, 'utf8')).filter(t => !removed.has(String(t.tweetId)));
+        return reply(200, tweets);
       }
       let start = 0, end = info.size - 1, code = 200;
       if (req.headers.range) {
@@ -117,6 +151,7 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
     } catch (e) { if (!res.headersSent) reply(e.code === 'ENOENT' ? 404 : 400, { error: 'Request could not be completed' }); else res.destroy(); }
   });
   const timer = schedule ? setInterval(() => {
+    if (state.removalPending && !worker.busy && Date.now() >= Date.parse(state.removalRetryAt || 0)) return purge();
     if (!state.paused && !state.loginPending && !worker.busy && Date.now() >= Date.parse(state.nextRun)) worker.update().catch(() => {});
   }, 30000) : null;
   server.on('close', () => { clearInterval(timer); clearInterval(knowledgeTimer); });

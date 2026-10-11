@@ -35,6 +35,11 @@ For configuration and token rotation, see [service operations](service/README.md
 - Use **Show more** for long tweets and **View page** for an individual page.
 - Quoted photos, videos, and GIFs appear inside quoted cards.
 - Use the theme button for light or dark mode.
+- Choose **Remove**, then **Confirm remove**, to delete a tweet from the archive. It
+  disappears at once; the service then deletes its page and any media no other tweet uses.
+  Removed IDs are kept in `.service/removed.json` and `archive/.removed-ids`, so updates and
+  imports never add them back. There is no undo button; `archive-previous` holds the
+  version before the most recent change.
 
 ## Backups
 

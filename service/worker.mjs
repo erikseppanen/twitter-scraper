@@ -24,7 +24,49 @@ export function selectNew(ids, known) {
 export class Worker {
   constructor(root, stateDir, save, state) {
     Object.assign(this, { root, stateDir, save, state });
-    this.busy = false; this.login = null;
+    this.busy = false; this.login = null; this.removed = new Set();
+  }
+  clojure(args) {
+    return run(process.env.CLOJURE || '/opt/homebrew/bin/clojure', ['-M', '-m', 'twitter-scraper.core', ...args], { cwd: this.root });
+  }
+  async stage() {
+    // APFS copy-on-write clone isolates changes without duplicating old media blocks.
+    const staging = path.join(this.root, 'archive-staging');
+    await rm(staging, { recursive: true, force: true });
+    await run('/bin/cp', ['-cR', path.join(this.root, 'archive'), staging]);
+    return staging;
+  }
+  async publish(staging) {
+    const archive = path.join(this.root, 'archive');
+    await rm(archive + '-previous', { recursive: true, force: true });
+    await rename(archive, archive + '-previous');
+    try { await rename(staging, archive); } catch (e) { await rename(archive + '-previous', archive); throw e; }
+  }
+  async purge() {
+    if (this.busy) throw new Error('An update or sign-in is already running.');
+    this.busy = true;
+    const ids = [...this.removed];
+    try {
+      this.state.message = 'Removing deleted tweets from the archive…'; await this.save();
+      const input = path.join(this.stateDir, 'removed.txt');
+      await writeFile(input, ids.join('\n'), { mode: 0o600 });
+      const staging = await this.stage();
+      await this.clojure(['--remove', input, '--output', staging]);
+      const output = JSON.parse(await readFile(path.join(staging, 'tweets.json'), 'utf8'));
+      if (output.some(t => this.removed.has(String(t.tweetId)))) throw new Error('Removed tweets are still present. The archive was not changed.');
+      await this.publish(staging);
+      // Removals requested while this ran are handled by the next pass.
+      if (this.removed.size === ids.length) this.state.removalPending = false;
+      this.state.removalRetryAt = null;
+      // Keep showing an outstanding update error, such as a required X sign-in.
+      this.state.message = this.state.error || 'Removed tweets from the archive.';
+    } catch (error) {
+      this.state.removalRetryAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      this.state.message = 'Could not finish removing tweets; retrying in five minutes. ' + error.message;
+    } finally {
+      this.busy = false;
+      await this.save();
+    }
   }
   async browser(headless) {
     const profile = path.join(this.stateDir, 'browser');
@@ -146,7 +188,8 @@ export class Worker {
       let archived = [];
       try { archived = JSON.parse(await readFile(path.join(this.root, 'archive/tweets.json'), 'utf8')); }
       catch (e) { if (e.code !== 'ENOENT') throw e; }
-      const known = new Set(archived.map(t => String(t.tweetId)));
+      // Removed tweets count as known so they are never collected again.
+      const known = new Set([...archived.map(t => String(t.tweetId)), ...this.removed]);
       const collected = new Set(); let idle = 0; let reachedBaseline = false; let knownStreak = 0;
       // Require a previously recorded like-order baseline; tweet IDs are not like timestamps.
       for (let round = 0; round < 200; round++) {
@@ -177,18 +220,12 @@ export class Worker {
         this.state.message = `Importing ${ids.length} new likes…`; await this.save();
         const input = path.join(this.stateDir, 'pending.txt');
         await writeFile(input, ids.join('\n'), { mode: 0o600 });
-        // APFS copy-on-write clone isolates updates without duplicating old media blocks.
-        const archive = path.join(this.root, 'archive');
-        const staging = path.join(this.root, 'archive-staging');
-        await rm(staging, { recursive: true, force: true });
-        await run('/bin/cp', ['-cR', archive, staging]);
-        await run(process.env.CLOJURE || '/opt/homebrew/bin/clojure', ['-M', '-m', 'twitter-scraper.core', '--import', input, '--output', staging], { cwd: this.root });
+        const staging = await this.stage();
+        await this.clojure(['--import', input, '--output', staging]);
         const output = JSON.parse(await readFile(path.join(staging, 'tweets.json'), 'utf8'));
         const valid = new Set(output.filter(t => t.text || t.user?.screenName).map(t => String(t.tweetId)));
         if (ids.some(id => !valid.has(id))) throw new Error('Some tweets could not be fetched. Archive preserved; retry will try them again.');
-        await rm(archive + '-previous', { recursive: true, force: true });
-        await rename(archive, archive + '-previous');
-        try { await rename(staging, archive); } catch (e) { await rename(archive + '-previous', archive); throw e; }
+        await this.publish(staging);
       }
       if (!complete) throw new Error('Could not reach the previous cutoff or verify the end of Likes. Imported this batch but preserved the cutoff; retry is needed.');
       if (collected.size) this.state.baseline = [...collected][0];

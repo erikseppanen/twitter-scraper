@@ -1,5 +1,6 @@
 (ns twitter-scraper.core
   (:require [clojure.tools.cli :refer [parse-opts]]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.edn :as edn]
             [twitter-scraper.parser :as parser]
@@ -24,6 +25,7 @@
    ["-r" "--include-retweets" "Include retweets from Twitter export (fetches original tweets)"]
    ["-R" "--retweets-only" "Archive only retweets, not likes"]
    ["-F" "--refetch-failed" "Re-fetch tweets that previously failed (empty text/user)"]
+   ["-X" "--remove FILE" "Remove tweet IDs listed in FILE from the archive; later imports skip them"]
    ["-h" "--help" "Show this help"]])
 
 (defn usage [options-summary]
@@ -65,6 +67,9 @@
       (:refetch-failed options)
       {:options options}
 
+      (:remove options)
+      {:options options}
+
       (nil? (:input options))
       {:exit-message (str "Error: --input is required\n\n" (usage summary)) :ok? false}
 
@@ -93,6 +98,29 @@
       (util/log-info "Loading cached tweet data...")
       (mapv #(fetcher/restore-local-media % output-dir)
             (edn/read-string (slurp cache-file))))))
+
+(defn parse-tweet-ids-file
+  "Parse tweet IDs from a file (one per line, supports URLs too)."
+  [file-path]
+  (->> (slurp file-path)
+       str/split-lines
+       (map str/trim)
+       (filter seq)
+       (map (fn [line]
+              ;; Extract ID from URL or use as-is
+              (if-let [match (re-find #"/status/(\d+)" line)]
+                (second match)
+                (re-find #"^\d+$" line))))
+       (filter some?)
+       vec))
+
+(defn load-removed-ids
+  "IDs the user removed from the archive. Imports skip them so they stay removed."
+  [output-dir]
+  (let [file (str output-dir "/.removed-ids")]
+    (if (util/file-exists? file)
+      (set (parse-tweet-ids-file file))
+      #{})))
 
 (defn run-archive
   "Main archiving pipeline."
@@ -129,7 +157,7 @@
                         rt-ids)
                       [])
         ;; Combine and deduplicate
-        all-tweet-ids (distinct (concat like-ids retweet-ids))
+        all-tweet-ids (remove (load-removed-ids output) (distinct (concat like-ids retweet-ids)))
         tweet-ids (if limit (take limit all-tweet-ids) all-tweet-ids)]
     (util/log-info "Total unique tweets to archive:" (count all-tweet-ids))
     (when limit
@@ -197,21 +225,6 @@
         (util/log-info "=== Archive Complete ===")
         (util/log-info "Open" (str output "/index.html") "in your browser")))))
 
-(defn parse-tweet-ids-file
-  "Parse tweet IDs from a file (one per line, supports URLs too)."
-  [file-path]
-  (->> (slurp file-path)
-       str/split-lines
-       (map str/trim)
-       (filter seq)
-       (map (fn [line]
-              ;; Extract ID from URL or use as-is
-              (if-let [match (re-find #"/status/(\d+)" line)]
-                (second match)
-                (re-find #"^\d+$" line))))
-       (filter some?)
-       vec))
-
 (defn run-import
   "Import tweets from a file of IDs and merge with existing archive."
   [{:keys [output delay skip-media import]}]
@@ -230,7 +243,8 @@
     ;; Load existing cache
     (let [existing-tweets (or (load-cache output) [])
           existing-ids (set (map :tweet-id existing-tweets))
-          ids-to-fetch (filterv #(not (existing-ids %)) new-ids)]
+          removed-ids (load-removed-ids output)
+          ids-to-fetch (filterv #(not (or (existing-ids %) (removed-ids %))) new-ids)]
 
       (util/log-info "Existing tweets in cache:" (count existing-tweets))
       (util/log-info "New tweets to fetch:" (count ids-to-fetch))
@@ -375,6 +389,43 @@
               (util/log-info "=== Re-fetch Complete ===")
               (util/log-info "Open" (str output "/index.html") "in your browser"))))))))
 
+;; Media filenames are shared when two tweets quote the same tweet.
+(defn- local-media-paths [tweet]
+  (keep :local-path (concat (:media tweet) (get-in tweet [:quote :media]))))
+
+(defn run-remove
+  "Remove tweets from the cache, generated pages, and media no other tweet uses."
+  [{:keys [output] remove-file :remove}]
+  (let [ids (set (parse-tweet-ids-file remove-file))
+        tweets (or (load-cache output) [])
+        {gone true kept false} (group-by #(contains? ids (:tweet-id %)) tweets)
+        kept (vec kept)
+        kept-ids (set (mapcat (juxt :tweet-id #(get-in % [:quote :tweet-id])) kept))
+        kept-media (set (mapcat local-media-paths kept))
+        delete! (fn [relative]
+                  (when (.delete (io/file output relative))
+                    (util/log-info "Deleted" relative)))]
+    (util/log-info "Removing" (count gone) "tweets from" output)
+    ;; Record removals before deleting anything, so an interrupted run is never re-imported.
+    (spit (str output "/.removed-ids")
+          (str (str/join "\n" (sort (into (load-removed-ids output) ids))) "\n"))
+    (when (seq gone)
+      (save-cache kept output)
+      (doseq [tweet gone
+              id (distinct [(:tweet-id tweet) (get-in tweet [:quote :tweet-id])])
+              :when (and id (not (kept-ids id)))]
+        (delete! (str "tweets/" id ".html"))
+        (delete! (str "articles/" id ".html"))
+        (doseq [file (.listFiles (io/file output "articles"))
+                :when (str/starts-with? (.getName file) (str id "-"))]
+          (delete! (str "articles/" (.getName file)))))
+      (doseq [relative (distinct (mapcat local-media-paths gone))
+              :when (not (kept-media relative))]
+        (delete! (str "media/" relative)))
+      (html/copy-css output)
+      (html/generate-all-pages kept output {}))
+    (util/log-info "Archive now has" (count kept) "tweets")))
+
 (defn -main [& args]
   (let [{:keys [options exit-message ok?]} (validate-args args)]
     (if exit-message
@@ -384,6 +435,7 @@
       (try
         (cond
           (:refetch-failed options) (run-refetch-failed options)
+          (:remove options) (run-remove options)
           (:import options) (run-import options)
           :else (run-archive options))
         (catch Exception e

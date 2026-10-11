@@ -10,7 +10,8 @@ Open your saved private bookmark, then choose **Browse archive** or **Update now
 Automatic checks run approximately every four hours while the service is running. Search,
 year/month/author filters, sorting, and light/dark themes are available in the archive.
 Individual tweet and article pages include downloaded media; quoted photos, videos, and
-GIFs appear inside quoted cards.
+GIFs appear inside quoted cards. **Remove** on any tweet deletes it, with its page and
+unshared media, and keeps it from being re-imported (see the [everyday guide](TUTORIAL.md#browsing)).
 
 If X requires a new login, choose **Reconnect X**, sign into the dedicated Chrome window
 on the Mini, then choose **Finish sign-in**. Automatic checks pause during sign-in. Your
@@ -157,12 +158,14 @@ test/twitter_scraper/core_test.clj
 
 archive/                  Published HTML, tweets.json, media/, articles/, tweets/
   .tweet-cache.edn         Cached metadata, text, and media references
+  .removed-ids             Tweets removed by the user; imports skip them
 archive-staging/          Temporary working copy for a normal update
 archive-previous/         Previous published archive for rollback
 .service/                 Private runtime state; excluded from Git
   access.json             Bearer credential
   private-link.txt        Complete private bookmark
   status.json             Schedule, like-order cutoff, and update/login status
+  removed.json            Removed tweet IDs, hidden immediately and never re-imported
   browser/                Dedicated Chrome profile and saved X session
   pending.txt             IDs passed to the importer
   service.log, error.log   LaunchAgent output
@@ -183,6 +186,9 @@ clj -M -m twitter-scraper.core --import /path/to/tweet-ids.txt --output ./archiv
 
 # Include retweets from the export (not collected by Likes automation)
 clj -M -m twitter-scraper.core --input ~/twitter-archive --output ./archive-repair --include-retweets
+
+# Remove tweets (IDs or URLs, one per line); later imports skip them
+clj -M -m twitter-scraper.core --remove /path/to/tweet-ids.txt --output ./archive-repair
 
 # Retry cached entries missing tweet content
 clj -M -m twitter-scraper.core --refetch-failed --output ./archive-repair
