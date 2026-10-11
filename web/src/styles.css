@@ -114,6 +114,11 @@ mark { background: var(--mark-bg); color: var(--mark-text); border-radius: 2px; 
 .pill.accent { border-color: var(--accent); background: var(--accent); color: #fff; }
 .pill.accent:hover { background: color-mix(in srgb, var(--accent) 85%, #000); }
 .pill:disabled { opacity: 0.5; cursor: default; }
+a.pill { display: inline-flex; align-items: center; color: var(--text); text-decoration: none; }
+
+/* Random: one tweet at a time */
+.random-controls { margin-top: 8px; }
+.random-hint { margin: 0; padding: 16px; text-align: center; color: var(--text-secondary); font-size: 13px; }
 .status { margin: 8px 0 0; color: var(--text-secondary); font-size: 13px; }
 
 /* Tweets */

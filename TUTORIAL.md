@@ -32,8 +32,12 @@ For configuration and token rotation, see [service operations](service/README.md
 
 - Search tweet text, author names/handles, and article titles. Your search, filters
   and sort stay in the address, so reloading or sharing the link keeps them.
-- Filter by year, month, or author (or select an @handle); switch between newest and
-  oldest first.
+- Filter by year, month, or author (or select an @handle); order newest first, oldest
+  first, or **Shuffled**. **Reshuffle** picks a new order; the shuffle is kept in the
+  address, so returning or reloading shows the same order.
+- **Random** shows one like at a time in a shuffled order. Use **Next** and
+  **Previous**, the arrow keys, or swipe left and right on a phone. **One at a time** on a
+  shuffled timeline opens it with the same filters and order.
 - Use **Show more** for long tweets. Select a tweet's date or **Permalink** for its own
   page with related likes.
 - **Related** shows similar likes: in a sidebar on wide screens, full screen on phones.

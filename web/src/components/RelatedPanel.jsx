@@ -50,7 +50,7 @@ export default function RelatedPanel({ id, byId, mode, canGoBack, onBack, onClos
           <h2>Related</h2>
           {center?.user?.screenName && <span className="secondary">to @{center.user.screenName}</span>}
         </div>
-        {mode !== 'inline' && <button type="button" className="icon-button" onClick={onClose} aria-label="Close related" title="Close"><CloseIcon /></button>}
+        {onClose && mode !== 'inline' && <button type="button" className="icon-button" onClick={onClose} aria-label="Close related" title="Close"><CloseIcon /></button>}
       </div>
       {state.message && <p className="related-message" role="status">{state.message}</p>}
       {!state.message && !related.length && <p className="related-message">No close matches yet.</p>}

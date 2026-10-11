@@ -1,9 +1,10 @@
 import { inApp } from '../router.js';
-import { HomeIcon, ExploreIcon, UpdatesIcon, ThemeIcon } from './Icons.jsx';
+import { HomeIcon, ExploreIcon, RandomIcon, UpdatesIcon, ThemeIcon } from './Icons.jsx';
 
 const ITEMS = [
   ['timeline', '/app/', 'Likes', HomeIcon],
   ['explore', '/app/explore', 'Explore', ExploreIcon],
+  ['random', '/app/random', 'Random', RandomIcon],
   ['updates', '/app/updates', 'Updates', UpdatesIcon],
 ];
 

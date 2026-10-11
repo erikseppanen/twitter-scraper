@@ -116,6 +116,7 @@ try {
   await page.waitForURL(origin + '/app/tweet/1000');
   await page.locator('.related-sidebar #tweet-1001').waitFor();
   assert.equal(await page.locator('.timeline .tweet').count(), 1);
+  assert.equal(await page.getByRole('button', { name: 'Close related' }).count(), 0);
   assert.equal(await page.locator('.timeline #tweet-1000 a.action', { hasText: 'Permalink' }).getAttribute('href'), '/tweet/1000');
   await page.goBack();
   await page.locator('.timeline #tweet-1000').waitFor();
@@ -129,7 +130,7 @@ try {
   await page.getByLabel('Year').selectOption('2025');
   await page.getByLabel('Month').selectOption('2');
   await page.locator('.status', { hasText: '(from Feb 2025, by @author1)' }).waitFor();
-  await page.getByRole('button', { name: '↓ Newest' }).click();
+  await page.getByLabel('Order').selectOption('asc');
   await page.reload();
   await page.locator('.status', { hasText: '(from Feb 2025, by @author1)' }).waitFor();
   assert.ok(page.url().includes('sort=asc'));
@@ -174,9 +175,80 @@ try {
   assert.deepEqual(actions, ['update', 'connect']);
   await page.getByRole('link', { name: 'Likes' }).click();
   await page.locator('.timeline .tweet').first().waitFor();
+  // Shuffled order: the seed in the address keeps the order on reload; Reshuffle picks a new one.
+  await page.getByLabel('Order').selectOption('random');
+  await page.waitForURL(/\/app\/\?sort=random&seed=\d+$/);
+  await page.locator('.status', { hasText: 'from 119 tweets, shuffled' }).waitFor();
+  const firstTen = () => page.locator('.timeline .tweet').evaluateAll(list => list.slice(0, 10).map(t => t.id).join());
+  const shuffled = await firstTen();
+  await page.reload();
+  await page.locator('.timeline .tweet').first().waitFor();
+  assert.equal(await firstTen(), shuffled);
+  await page.getByRole('button', { name: 'Reshuffle' }).click();
+  await page.waitForFunction(before => [...document.querySelectorAll('.timeline .tweet')].slice(0, 10).map(t => t.id).join() !== before, shuffled);
+  // One at a time keeps the filters and the shuffled order.
+  await page.getByLabel('Author').selectOption('author1');
+  await page.locator('.status', { hasText: 'of 40 (by @author1) from 119 tweets, shuffled' }).waitFor();
+  const [firstId, secondId, thirdId] = await page.locator('.timeline .tweet').evaluateAll(list => list.slice(0, 3).map(t => t.id));
+  await page.getByRole('link', { name: 'One at a time' }).click();
+  await page.waitForURL(/\/app\/random\?seed=\d+&author=author1$/);
+  await page.locator('.random .status', { hasText: '1 of 40 (by @author1)' }).waitFor();
+  assert.equal(await page.locator('.timeline .tweet').count(), 1);
+  assert.equal(await page.locator('.timeline .tweet').getAttribute('id'), firstId);
+  assert.equal(await page.getByRole('link', { name: 'Random' }).getAttribute('aria-current'), 'page');
+  await page.locator('.related-sidebar .tweet').first().waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Close related' }).count(), 0);
+  await page.keyboard.press('ArrowRight');
+  await page.locator('.timeline #' + secondId).waitFor();
+  assert.ok(page.url().endsWith('&n=2'), page.url());
+  await page.reload();
+  await page.locator('.timeline #' + secondId).waitFor();
+  await page.keyboard.press('ArrowLeft');
+  await page.locator('.timeline #' + firstId).waitFor();
+  assert.ok(await page.getByRole('button', { name: '← Previous' }).isDisabled());
+  await page.getByRole('button', { name: 'Next →' }).click();
+  await page.locator('.timeline #' + secondId).waitFor();
+  // The tweet's page and Back return to the same place in the shuffle.
+  await page.locator('.timeline .tweet .date').click();
+  await page.waitForURL(origin + '/app/tweet/' + secondId.slice(6));
+  await page.goBack();
+  await page.locator('.random #' + secondId).waitFor();
+  // Removing the shown tweet moves on to the next one.
+  await page.locator('.timeline .tweet').getByRole('button', { name: 'Remove' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
+  await page.locator('.timeline #' + thirdId).waitFor();
+  await page.locator('.random .status', { hasText: '2 of 39 (by @author1)' }).waitFor();
+  assert.equal(purges, 2);
+  // A new shuffle starts over; clearing the filters shuffles all likes.
+  await page.getByRole('button', { name: 'Reshuffle' }).click();
+  await page.locator('.random .status', { hasText: /^1 of 39 \(by @author1\)$/ }).waitFor();
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  await page.locator('.random .status', { hasText: /^1 of 118$/ }).waitFor();
+  assert.ok(!page.url().includes('author'));
   // Phone width keeps the layout inside the screen.
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  // On a phone, swiping moves through the shuffle, and Related opens over it.
+  const swipe = dx => page.evaluate(dx => {
+    const el = document.querySelector('main.random');
+    for (const [type, x] of [['touchstart', 200], ['touchend', 200 + dx]]) {
+      const t = new Touch({ identifier: 1, target: el, clientX: x, clientY: 400 });
+      el.dispatchEvent(new TouchEvent(type, { bubbles: true, touches: type === 'touchend' ? [] : [t], changedTouches: [t] }));
+    }
+  }, dx);
+  await page.locator('.related-sidebar').waitFor({ state: 'detached' });
+  await swipe(-120);
+  await page.locator('.random .status', { hasText: /^2 of 118$/ }).waitFor();
+  await swipe(120);
+  await page.locator('.random .status', { hasText: /^1 of 118$/ }).waitFor();
+  await page.locator('.timeline .tweet').getByRole('button', { name: 'Related' }).click();
+  await page.locator('.related-overlay .tweet').first().waitFor();
+  // Arrow keys belong to the open panel, not the shuffle.
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.random .status').textContent(), '1 of 118');
+  await page.getByRole('link', { name: 'Likes' }).click();
+  await page.locator('.timeline .tweet').first().waitFor();
   // On a phone, Related covers the screen and Escape closes it.
   await page.locator('.timeline .tweet').first().getByRole('button', { name: 'Related' }).click();
   await page.locator('.related-overlay .tweet').first().waitFor();
@@ -189,7 +261,7 @@ try {
   await page.locator('.graph .node').first().waitFor();
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   assert.deepEqual(errors, []);
-  console.log('PASS: React app timeline, related, translation, removal, tweet pages, Explore, Updates and phone layout.');
+  console.log('PASS: React app timeline, shuffle, Random, related, translation, removal, tweet pages, Explore, Updates and phone layout.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

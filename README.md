@@ -7,11 +7,12 @@ content, download media, and generate searchable HTML. No LLM or browser extensi
 ## Everyday use
 
 Open your saved private bookmark; it signs you in and opens the archive app. The app
-follows X's layout: **Likes** (your timeline), **Explore** and **Updates** in a left menu,
+follows X's layout: **Likes** (your timeline), **Explore**, **Random** and **Updates** in a left menu,
 or a bottom tab bar on phones. Automatic checks run approximately every four hours while
 the service is running; **Updates** has **Update now** and the X sign-in controls.
 
-In **Likes**, search, filter by year, month or author, sort, and switch light/dark themes.
+In **Likes**, search, filter by year, month or author, sort newest, oldest or shuffled, and
+switch light/dark themes. **Random** shows likes one at a time in a shuffled order.
 Each tweet has **Related** (similar likes, in a sidebar on wide screens), **Permalink**
 (its own page at `/app/tweet/ID`), a link to X, and **Remove**. Remove deletes the tweet,
 its page and unshared media, and keeps it from being re-imported (see the
@@ -36,7 +37,7 @@ service APIs for related tweets, translation, removal and updates.
 ```bash
 npm ci --prefix web
 npm run build --prefix web            # the server serves web/dist at /app/
-npm test --prefix web                 # filtering, sorting and text formatting
+npm test --prefix web                 # filtering, sorting, shuffling and text formatting
 npm --prefix service run test:web     # builds, then checks the app in Chrome
 ```
 
@@ -163,11 +164,11 @@ a required part of the automated service; removing the old extension does not re
 
 ```text
 web/                      React + Vite archive app served at /app/
-  src/tweets.js           Filtering, sorting, links and highlighting
+  src/tweets.js           Filtering, sorting, shuffling, links and highlighting
   src/components/         Tweet, related panel, dialog, media, quote and header components
   src/translation.js      Shared, retrying translation requests
   src/router.js           History routing for /app/, /app/tweet/ID, /app/explore, /app/updates
-  src/pages/              Timeline, tweet, Explore and Updates pages
+  src/pages/              Timeline, tweet, Explore, Random and Updates pages
 service/
   server.mjs              HTTP authentication, protected files, APIs, scheduler
   worker.mjs              Chrome lifecycle, Likes collection, staged imports

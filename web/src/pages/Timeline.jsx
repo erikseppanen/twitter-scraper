@@ -2,28 +2,20 @@ import { useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import Header from '../components/Header.jsx';
 import Tweet from '../components/Tweet.jsx';
 import RelatedPanel from '../components/RelatedPanel.jsx';
-import { PAGE_SIZE, MONTHS, filterTweets, sortTweets, facets as countFacets } from '../tweets.js';
+import { PAGE_SIZE, FILTERS, readFilters, writeFilters, describeFilters, filterTweets, orderTweets, newSeed, parseSeed, facets as countFacets } from '../tweets.js';
 import { replaceAddress } from '../router.js';
 
-const FILTERS = ['query', 'year', 'month', 'author'];
-
-// Search, filters, sort and the open Related panel live in the address.
+// Search, filters, order and the open Related panel live in the address.
 function readLocation() {
   const params = new URLSearchParams(location.search);
   const related = params.get('related');
+  const sort = ['asc', 'random'].includes(params.get('sort')) ? params.get('sort') : 'desc';
   return {
-    filters: Object.fromEntries(FILTERS.map(key => [key, params.get(key) || ''])),
-    sort: params.get('sort') === 'asc' ? 'asc' : 'desc',
+    filters: readFilters(params),
+    sort,
+    seed: sort === 'random' ? parseSeed(params.get('seed')) || newSeed() : null,
     related: /^\d+$/.test(related || '') ? related : null,
   };
-}
-
-function describe({ query, year, month, author }) {
-  const parts = [];
-  if (year || month) parts.push('from ' + [month && MONTHS[month - 1], year].filter(Boolean).join(' '));
-  if (author) parts.push('by @' + author);
-  if (query.trim()) parts.push(`matching "${query.trim()}"`);
-  return parts.length ? ` (${parts.join(', ')})` : '';
 }
 
 export default function Timeline({ tweets, byId, error, wide, onRemove }) {
@@ -31,22 +23,22 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
   const [trail, setTrail] = useState(() => view.related ? [view.related] : []);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const sentinel = useRef(null);
-  const { filters, sort, related } = view;
+  const { filters, sort, seed, related } = view;
   const deferredFilters = useDeferredValue(filters);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    for (const key of FILTERS) if (filters[key]) params.set(key, filters[key]);
-    if (sort === 'asc') params.set('sort', 'asc');
+    const params = writeFilters(new URLSearchParams(), filters);
+    if (sort !== 'desc') params.set('sort', sort);
+    if (seed) params.set('seed', seed);
     if (related) params.set('related', related);
     const search = params.toString();
     replaceAddress('/app/' + (search ? '?' + search : ''));
-  }, [filters, sort, related]);
+  }, [filters, sort, seed, related]);
 
   const facets = useMemo(() => countFacets(tweets || []), [tweets]);
-  const visible = useMemo(() => sortTweets(filterTweets(tweets || [], deferredFilters), sort), [tweets, deferredFilters, sort]);
+  const visible = useMemo(() => orderTweets(filterTweets(tweets || [], deferredFilters), sort, seed), [tweets, deferredFilters, sort, seed]);
 
-  useEffect(() => { setLimit(PAGE_SIZE); }, [deferredFilters, sort]);
+  useEffect(() => { setLimit(PAGE_SIZE); }, [deferredFilters, sort, seed]);
 
   // Load the next page as the end of the list approaches.
   useEffect(() => {
@@ -72,6 +64,9 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
     return { ...current, filters: next };
   });
   const clear = () => setView(current => ({ ...current, filters: Object.fromEntries(FILTERS.map(key => [key, ''])) }));
+  // Shuffling, or shuffling again, picks a new seed; the seed in the address keeps the order on return.
+  const setSort = next => { setView(current => ({ ...current, sort: next, seed: next === 'random' ? newSeed() : null })); scrollTo({ top: 0 }); };
+  const oneAtATime = '/app/random?' + writeFilters(new URLSearchParams({ seed }), filters);
   const showAuthor = author => { setFilter('author', author); scrollTo({ top: 0 }); };
   const openRelated = id => {
     setView(current => ({ ...current, related: id }));
@@ -87,7 +82,7 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
   const close = () => { setTrail([]); setView(current => ({ ...current, related: null })); };
 
   const shown = Math.min(limit, visible.length);
-  const status = tweets ? `Showing ${shown} of ${visible.length}${describe(deferredFilters)} from ${tweets.length} tweets` : error || 'Loading…';
+  const status = tweets ? `Showing ${shown} of ${visible.length}${describeFilters(deferredFilters)} from ${tweets.length} tweets${sort === 'random' ? ', shuffled' : ''}` : error || 'Loading…';
   const panel = related && tweets && (
     <RelatedPanel id={related} byId={byId} mode={wide ? 'sidebar' : 'overlay'} canGoBack={trail.length > 1}
       onBack={back} onClose={close} onRelated={openRelated} onRemove={onRemove} />
@@ -96,7 +91,7 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
     <>
       <main className="timeline">
         <Header filters={filters} setFilter={setFilter} clear={clear} facets={facets} status={status}
-          sort={sort} toggleSort={() => setView(current => ({ ...current, sort: current.sort === 'desc' ? 'asc' : 'desc' }))} />
+          sort={sort} setSort={setSort} oneAtATime={oneAtATime} />
         {visible.slice(0, shown).map(tweet => (
           <Tweet key={tweet.tweetId} tweet={tweet} query={deferredFilters.query} active={tweet.tweetId === related}
             onAuthor={showAuthor} onRelated={startRelated} onRemove={onRemove} />

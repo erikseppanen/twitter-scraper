@@ -1,6 +1,7 @@
 import { MONTHS } from '../tweets.js';
+import { inApp } from '../router.js';
 
-export default function Header({ filters, setFilter, clear, facets, sort, toggleSort, status }) {
+export default function Header({ filters, setFilter, clear, facets, sort, setSort, oneAtATime, status }) {
   const { query, year, month, author } = filters;
   const active = query || year || month || author;
   return (
@@ -25,7 +26,15 @@ export default function Header({ filters, setFilter, clear, facets, sort, toggle
           <option value="">Author ({facets.authors.length})</option>
           {facets.authors.map(([name, count]) => <option key={name} value={name}>@{name} ({count})</option>)}
         </select>
-        <button type="button" className="pill" onClick={toggleSort} title={sort === 'desc' ? 'Showing newest first' : 'Showing oldest first'}>{sort === 'desc' ? '↓ Newest' : '↑ Oldest'}</button>
+        <select value={sort} onChange={e => setSort(e.target.value)} aria-label="Order">
+          <option value="desc">Newest first</option>
+          <option value="asc">Oldest first</option>
+          <option value="random">Shuffled</option>
+        </select>
+        {sort === 'random' && <>
+          <button type="button" className="pill" onClick={() => setSort('random')} title="Shuffle into a new order">Reshuffle</button>
+          <a className="pill" href={oneAtATime} onClick={inApp(oneAtATime)} title="Read these one at a time">One at a time</a>
+        </>}
         {active && <button type="button" className="pill" onClick={clear} title="Clear search and filters">Clear</button>}
       </div>
       <p className="status" role="status">{status}</p>

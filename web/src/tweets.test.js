@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterTweets, sortTweets, facets, tokenize, highlight, mediaSource } from './tweets.js';
+import { filterTweets, sortTweets, shuffleTweets, parseSeed, describeFilters, facets, tokenize, highlight, mediaSource } from './tweets.js';
 
 const tweets = [
   { tweetId: '1', text: 'Sourdough bread', createdAt: '2024-03-05T12:00:00Z', user: { name: 'Baker', screenName: 'baker' } },
@@ -34,4 +34,18 @@ test('links URLs, mentions and hashtags and highlights matches', () => {
     [['text', 'Hi '], ['link', '@ann'], ['text', ' see '], ['link', 'https://a.example/x'], ['text', ' '], ['link', '#tag'], ['text', '!']]);
   assert.deepEqual(highlight('Bread and bread', 'BREAD').map(p => p.match), [true, false, true]);
   assert.equal(mediaSource({ localPath: 'a b.jpg', url: 'https://x/y' }), '/archive/media/a%20b.jpg');
+});
+
+test('shuffles the same way for a seed and keeps the order when tweets are removed', () => {
+  const many = Array.from({ length: 200 }, (_, i) => ({ tweetId: String(5000 + i) }));
+  const ids = list => list.map(t => t.tweetId);
+  const once = ids(shuffleTweets(many, 42));
+  assert.deepEqual(ids(shuffleTweets(many.slice().reverse(), 42)), once);
+  assert.deepEqual(once.slice().sort(), ids(many));
+  assert.notDeepEqual(once, ids(many));
+  assert.notDeepEqual(ids(shuffleTweets(many, 43)), once);
+  assert.deepEqual(ids(shuffleTweets(many.filter(t => t.tweetId !== once[5]), 42)), once.filter(id => id !== once[5]));
+  assert.equal(parseSeed('123'), 123);
+  for (const bad of ['', '0', '01', 'x', '1234567890']) assert.equal(parseSeed(bad), null);
+  assert.equal(describeFilters({ query: ' bread ', year: '2024', month: '3', author: 'baker' }), ' (from Mar 2024, by @baker, matching "bread")');
 });

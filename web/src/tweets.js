@@ -35,6 +35,45 @@ export function sortTweets(tweets, order = 'desc') {
   });
 }
 
+// Each tweet's place in a shuffle depends only on the seed and its ID, so removing or
+// adding tweets leaves the rest of the order as it was.
+function rank(seed, id) {
+  let h = (2166136261 ^ seed) >>> 0;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+export function shuffleTweets(tweets, seed) {
+  return tweets.map(tweet => [rank(seed, String(tweet.tweetId)), tweet])
+    .sort((a, b) => a[0] - b[0] || (a[1].tweetId < b[1].tweetId ? -1 : 1))
+    .map(([, tweet]) => tweet);
+}
+
+export const newSeed = () => 1 + Math.floor(Math.random() * 999999);
+export const parseSeed = value => /^[1-9]\d{0,8}$/.test(value || '') ? Number(value) : null;
+
+export function orderTweets(tweets, sort, seed) {
+  return sort === 'random' ? shuffleTweets(tweets, seed) : sortTweets(tweets, sort);
+}
+
+// Search and filters, as kept in the address.
+export const FILTERS = ['query', 'year', 'month', 'author'];
+export const readFilters = params => Object.fromEntries(FILTERS.map(key => [key, params.get(key) || '']));
+export function writeFilters(params, filters) {
+  for (const key of FILTERS) if (filters[key]) params.set(key, filters[key]);
+  return params;
+}
+
+export function describeFilters({ query, year, month, author }) {
+  const parts = [];
+  if (year || month) parts.push('from ' + [month && MONTHS[month - 1], year].filter(Boolean).join(' '));
+  if (author) parts.push('by @' + author);
+  if (query.trim()) parts.push(`matching "${query.trim()}"`);
+  return parts.length ? ` (${parts.join(', ')})` : '';
+}
+
 export function facets(tweets) {
   const authors = new Map(), years = new Map(), months = new Map();
   for (const tweet of tweets) {

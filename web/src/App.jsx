@@ -5,6 +5,7 @@ import Timeline from './pages/Timeline.jsx';
 import TweetPage from './pages/TweetPage.jsx';
 import Explore from './pages/Explore.jsx';
 import Updates from './pages/Updates.jsx';
+import Random from './pages/Random.jsx';
 import { getJSON, removeTweet } from './api.js';
 import { parseRoute, useNavigation, navigate } from './router.js';
 
@@ -69,6 +70,7 @@ export default function App() {
   let page;
   if (route.page === 'tweet') page = <TweetPage key={navigation} id={route.id} {...shared} />;
   else if (route.page === 'explore') page = <Explore key={navigation} id={route.id} {...shared} />;
+  else if (route.page === 'random') page = <Random key={navigation} {...shared} />;
   else if (route.page === 'updates') page = <Updates key={navigation} wide={wide} />;
   else page = <Timeline key={navigation} {...shared} />;
 
