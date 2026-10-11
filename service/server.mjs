@@ -37,8 +37,9 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
   const translations = new Translations(root, stateDir);
   const knowledge = knowledgeIndex || new KnowledgeIndex(root, stateDir);
   const assets = new Map(await Promise.all(['knowledge.html', 'knowledge.css', 'knowledge-ui.js', 'knowledge-links.js', 'translation-ui.js', 'archive-remove.js'].map(async name => [name, await readFile(new URL('./' + name, import.meta.url))])));
-  if (indexKnowledge) void knowledge.refresh();
-  const knowledgeTimer = indexKnowledge ? setInterval(() => { void knowledge.refresh(); }, 60000) : null;
+  const background = () => { void knowledge.refresh(); translations.warm().catch(() => {}); };
+  if (indexKnowledge) background();
+  const knowledgeTimer = indexKnowledge ? setInterval(background, 60000) : null;
   const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');

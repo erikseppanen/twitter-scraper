@@ -63,4 +63,16 @@ export class Translations {
     });
     this.queue=job;this.pending.set(key,job);try{return await job;}finally{this.pending.delete(key);}
   }
+  // Translate everything ahead of time so pages never wait on the model. Already
+  // cached texts return immediately, and viewer requests wait behind at most one text.
+  async warm() {
+    if (this.warming) return; this.warming=true;
+    try {
+      await this.tweet('');
+      for (const tweet of [...this.tweets.values()]) for (const quoted of [false,true]) {
+        const text=(quoted?tweet.quote:tweet)?.text;
+        if (text && detect(text)) await this.get(tweet.tweetId,quoted).catch(()=>{});
+      }
+    } catch(e) { if(e.code!=='ENOENT') throw e; } finally { this.warming=false; }
+  }
 }
