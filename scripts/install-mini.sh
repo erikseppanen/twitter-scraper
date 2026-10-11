@@ -12,6 +12,9 @@ clojure -P
 clojure -M:test
 npm ci --prefix service --ignore-scripts
 npm test --prefix service
+npm ci --prefix web --ignore-scripts
+npm test --prefix web
+npm run build --prefix web
 mkdir -p .service "$HOME/Library/LaunchAgents"
 chmod 700 .service
 export APP_ROOT PUBLIC_ORIGIN
@@ -33,7 +36,12 @@ os.chmod(p, 0o600)
 PY
 PLIST="$HOME/Library/LaunchAgents/local.twitter-archive.plist"
 launchctl bootout "gui/$(id -u)/local.twitter-archive" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST"
+# bootout returns before the old service has fully stopped; bootstrap fails until it has.
+for attempt in {1..15}; do
+  launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null && break
+  if (( attempt == 15 )); then launchctl bootstrap "gui/$(id -u)" "$PLIST"; fi
+  sleep 1
+done
 for attempt in {1..20}; do
   if curl -fsS http://127.0.0.1:4318/ >/dev/null; then break; fi
   sleep 1

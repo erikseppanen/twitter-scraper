@@ -35,3 +35,7 @@ archive-before-media-repair/
 .env
 .env.*
 !.env.example
+
+# React app dependencies and build output
+web/node_modules/
+web/dist/

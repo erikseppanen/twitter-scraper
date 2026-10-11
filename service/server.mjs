@@ -11,7 +11,8 @@ import { Translations } from './translation.mjs';
 export function equal(a, b) {
   return typeof a === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
-const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.mp4': 'video/mp4', '.svg': 'image/svg+xml' };
+const webDist = fileURLToPath(new URL('../web/dist/', import.meta.url));
+const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.mp4': 'video/mp4', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 export async function createApp({ root, stateDir, publicOrigin, workerFactory, schedule = true, knowledgeIndex, indexKnowledge = schedule }) {
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   // Recover the small publication rename window after an unexpected shutdown.
@@ -64,11 +65,27 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
       if (req.method === 'GET' && url.pathname === '/') return reply(200, dashboard, 'text/html; charset=utf-8');
       const tweetPage = /^\/tweet\/\d+$/.test(url.pathname);
       const knowledgePage = url.pathname === '/knowledge' || /^\/knowledge\/tweet\/\d+$/.test(url.pathname);
-      if (!authorized && req.method === 'GET' && (knowledgePage || tweetPage || url.pathname.startsWith('/archive/'))) {
+      const appPage = url.pathname === '/app' || url.pathname.startsWith('/app/');
+      if (!authorized && req.method === 'GET' && (knowledgePage || tweetPage || appPage || url.pathname.startsWith('/archive/'))) {
         res.writeHead(302, { Location: '/?next=' + encodeURIComponent(url.pathname + url.search) }); return res.end();
       }
       if (!authorized) return reply(401, { error: 'Open your private bookmark to access the archive.' });
       if (req.method === 'GET' && tweetPage) { res.writeHead(302, { Location: '/archive/?related=' + url.pathname.split('/').at(-1) }); return res.end(); }
+      if (req.method === 'GET' && appPage) {
+        if (url.pathname === '/app') { res.writeHead(302, { Location: '/app/' + url.search }); return res.end(); }
+        // The React app (web/, built by Vite). Hashed assets are immutable; other paths are app routes.
+        const asset = /^\/app\/(assets\/[\w.-]+)$/.exec(url.pathname)?.[1];
+        try {
+          if (!asset) return reply(200, await readFile(path.join(webDist, 'index.html')), mime['.html']);
+          if (!mime[path.extname(asset)]) return reply(404, { error: 'Not found' });
+          const body = await readFile(path.join(webDist, asset));
+          res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+          return reply(200, body, mime[path.extname(asset)]);
+        } catch (e) {
+          if (e.code !== 'ENOENT') throw e;
+          return asset ? reply(404, { error: 'Not found' }) : reply(503, 'The web app has not been built. Run npm run build --prefix web.', 'text/plain; charset=utf-8');
+        }
+      }
       if (req.method === 'GET' && knowledgePage) return reply(200, assets.get('knowledge.html'), 'text/html; charset=utf-8');
       if (req.method === 'GET' && ['/knowledge.css', '/knowledge-ui.js', '/knowledge-links.js', '/translation-ui.js', '/archive-remove.js'].includes(url.pathname)) return reply(200, assets.get(url.pathname.slice(1)), mime[path.extname(url.pathname)]);
       if (req.method === 'GET' && url.pathname === '/api/translation') {

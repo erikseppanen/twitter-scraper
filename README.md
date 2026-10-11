@@ -20,6 +20,26 @@ so the service can start.
 
 See the [everyday guide](TUTORIAL.md) for browsing, backups, and recovery.
 
+## New archive app (in progress)
+
+A React rewrite of the archive is served at `/app/` alongside the current archive; the
+dashboard links to it as **Try the new archive**. It is plain JavaScript built with Vite,
+styled after X's timeline, and loads `archive/tweets.json` through the same private-link
+login. Search, year/month/author filters, sorting, infinite scrolling, themes, media,
+quotes and articles work; Related, translation, Remove and the dashboard still use the
+current archive until they are ported. The Clojure-generated pages remain as a fallback
+that opens without the server.
+
+```bash
+npm ci --prefix web
+npm run build --prefix web            # the server serves web/dist at /app/
+npm test --prefix web                 # filtering, sorting and text formatting
+npm --prefix service run test:web     # builds, then checks the app in Chrome
+```
+
+For live reloading, start `node service/preview-knowledge.mjs`, open its private bookmark
+once to sign in, then run `npm run dev --prefix web` and open `http://127.0.0.1:5173/app/`.
+
 ## Knowledge explorer
 
 Choose **Explore knowledge** on the dashboard, or **Explore related** on any archived
@@ -138,6 +158,9 @@ a required part of the automated service; removing the old extension does not re
 ## Project and data layout
 
 ```text
+web/                      React + Vite archive app served at /app/
+  src/tweets.js           Filtering, sorting, links and highlighting
+  src/components/         Tweet, media, quote, article and header components
 service/
   server.mjs              HTTP authentication, protected files, APIs, scheduler
   worker.mjs              Chrome lifecycle, Likes collection, staged imports
