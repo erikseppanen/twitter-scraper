@@ -9,8 +9,9 @@ try {
  const context=await browser.newContext();
  const page=await context.newPage();
  await page.goto(origin);
- const unauth=await page.evaluate(async()=> (await fetch('/archive/tweets.json')).status);
- assert.equal(unauth,401);
+ // Signed out, archive data redirects to the unlock page instead of loading.
+ const unauth=await page.evaluate(async()=>{const r=await fetch('/archive/tweets.json',{redirect:'manual'});return r.type==='opaqueredirect'?'redirect':r.status;});
+ assert.equal(unauth,'redirect');
  await page.goto(link);
  await page.waitForURL(/\/app\/$/,{timeout:20000});
  assert.equal(new URL(page.url()).hash,'');
