@@ -7,7 +7,7 @@ const LIMIT = 8;
 
 // Semantic neighbors of one tweet: a sidebar on wide screens, full screen on phones,
 // or a section under the tweet on its own page.
-export default function RelatedPanel({ id, byId, mode, canGoBack, onBack, onClose, onRelated, onRemove, navigate }) {
+export default function RelatedPanel({ id, byId, mode, canGoBack, onBack, onClose, onRelated, onRemove }) {
   const [state, setState] = useState({ id: null, nodes: [], message: 'Finding related likes…' });
   const [attempt, setAttempt] = useState(0);
 
@@ -55,7 +55,7 @@ export default function RelatedPanel({ id, byId, mode, canGoBack, onBack, onClos
       {state.message && <p className="related-message" role="status">{state.message}</p>}
       {!state.message && !related.length && <p className="related-message">No close matches yet.</p>}
       {related.map(tweet => (
-        <Tweet key={tweet.tweetId} tweet={tweet} navigate={navigate} onRelated={onRelated} onRemove={onRemove} />
+        <Tweet key={tweet.tweetId} tweet={tweet} onRelated={onRelated} onRemove={onRemove} />
       ))}
       {!!related.length && <p className="related-note">Matched by meaning, not by links or replies.</p>}
     </aside>

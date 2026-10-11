@@ -1,14 +1,11 @@
 import { MONTHS } from '../tweets.js';
 
-export default function Header({ filters, setFilter, clear, facets, sort, toggleSort, theme, toggleTheme, status }) {
+export default function Header({ filters, setFilter, clear, facets, sort, toggleSort, status }) {
   const { query, year, month, author } = filters;
   const active = query || year || month || author;
   return (
     <header className="page-header">
-      <div className="header-top">
-        <h1>Likes</h1>
-        <button type="button" className="icon-button" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} aria-label="Toggle theme">◐</button>
-      </div>
+      <h1>Likes</h1>
       <div className="search">
         <input type="search" placeholder="Search likes" value={query} onChange={e => setFilter('query', e.target.value)} aria-label="Search likes" />
       </div>

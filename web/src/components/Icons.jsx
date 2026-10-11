@@ -8,3 +8,11 @@ export const TrashIcon = icon(<><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 
 export const ExternalIcon = icon(<><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></>);
 export const BackIcon = icon(<path d="M19 12H5M11 6l-6 6 6 6" />);
 export const CloseIcon = icon(<path d="M6 6l12 12M18 6L6 18" />);
+
+const navIcon = path => function Icon() {
+  return <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{path}</svg>;
+};
+export const HomeIcon = navIcon(<path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />);
+export const ExploreIcon = navIcon(<><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></>);
+export const UpdatesIcon = navIcon(<><path d="M20 12a8 8 0 0 1-14.2 5M4 12a8 8 0 0 1 14.2-5" /><path d="M18.5 3v4h-4M5.5 21v-4h4" /></>);
+export const ThemeIcon = navIcon(<><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" /></>);

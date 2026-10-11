@@ -28,17 +28,23 @@ await writeFile(path.join(root, 'archive/tweets.json'), JSON.stringify(tweets));
 await writeFile(path.join(root, 'archive/media/photo.png'), png);
 const port = 14328, origin = 'http://127.0.0.1:' + port;
 // Neighbors are the next two tweets; the translator is a slow stand-in for the local model.
-const knowledge = { rows: tweets, summary: () => ({ state: 'ready' }), search: async () => [],
-  graph: id => { const i = tweets.findIndex(t => t.tweetId === id); return i < 0 ? null : { center: id, nodes: [i, i + 1, i + 2].map(n => ({ tweet: tweets[n % tweets.length] })), edges: [] }; } };
+const searches = [];
+const knowledge = { rows: tweets, summary: () => ({ state: 'ready', message: 'Semantic index ready.', available: tweets.length, topics: ['Food', 'Science'] }),
+  search: async (q, topic) => { searches.push([q, topic]); return tweets.filter(t => !q || t.text.includes(q)).slice(0, 5).map(tweet => ({ tweet: { ...tweet, topic: 'Science' }, score: q ? 0.5 : null })); },
+  graph: id => { const i = tweets.findIndex(t => t.tweetId === id); if (i < 0) return null;
+    const nodes = [i, i + 1, i + 2].map((n, k) => ({ tweet: { ...tweets[n % tweets.length], topic: 'Science' }, score: k ? 0.6 : 1 }));
+    return { center: id, nodes, edges: nodes.slice(1).map(n => ({ source: id, target: n.tweet.tweetId, score: 0.6 })), neighborhood: { title: 'Rockets and bread', themes: ['Science'] } }; } };
 const translations = new Translations(root, path.join(root, '.service'), async () => { await new Promise(r => setTimeout(r, 800)); return 'Translated sentence.'; });
-let purges = 0;
+let purges = 0; const actions = [];
 const { server, config } = await createApp({ root, stateDir: path.join(root, '.service'), publicOrigin: origin, schedule: false, knowledgeIndex: knowledge, translations,
-  workerFactory: () => ({ busy: false, purge: async () => { purges++; } }) });
+  workerFactory: state => Object.assign(state, { message: 'Up to date. Imported 0 new likes.', lastSuccess: '2026-10-01T12:00:00Z' }) && ({ busy: false, purge: async () => { purges++; },
+    update: async () => { actions.push('update'); }, connect: async () => { actions.push('connect'); }, finish: async () => { actions.push('finish'); } }) });
 await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
 let browser;
 try {
   browser = await chromium.launch({ channel: 'chrome', headless: true });
-  const page = await browser.newPage();
+  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+  const page = await context.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   // Signed-out visitors unlock with the private link and return to the app.
   await page.goto(origin + '/app/?query=rockets');
@@ -123,6 +129,42 @@ try {
   await page.getByLabel('Toggle theme').click();
   await page.reload();
   assert.notEqual(await page.evaluate(() => document.documentElement.dataset.theme), before);
+  // Explore searches by meaning and shows a tweet's neighborhood with copyable note links.
+  await page.getByRole('link', { name: 'Explore' }).click();
+  await page.waitForURL(origin + '/app/explore');
+  await page.locator('.timeline .tweet').first().waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Explore' }).getAttribute('aria-current'), 'page');
+  await page.locator('.status', { hasText: 'Semantic index ready.' }).waitFor();
+  await page.getByLabel('Search by meaning').fill('rockets');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await page.locator('.section-title', { hasText: 'Related by meaning' }).waitFor();
+  assert.equal(await page.locator('.timeline .tweet').first().getAttribute('id'), 'tweet-1001');
+  assert.deepEqual(searches.at(-1), ['rockets', '']);
+  const result = page.locator('.timeline .tweet').first();
+  const resultId = (await result.getAttribute('id')).slice(6);
+  await result.getByRole('button', { name: 'Related' }).click();
+  await page.waitForURL(origin + '/app/explore/tweet/' + resultId + '?q=rockets');
+  await page.locator('.neighborhood h2', { hasText: 'Rockets and bread' }).waitFor();
+  // Neighbors are 1002 and 1003; 1003 was removed above, so the server leaves it out.
+  assert.equal(await page.locator('.graph .node').count(), 2);
+  assert.equal(await page.locator('.explore-sidebar .result').count(), 4); // five matches minus removed 1003
+  await page.getByRole('button', { name: 'Copy Org link' }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  assert.ok(copied.startsWith(`[[${origin}/knowledge/tweet/${resultId}][@`), copied);
+  assert.ok(!copied.includes(config.token));
+  await page.locator('.graph .node:not(.center)').first().click();
+  await page.waitForURL(url => url.pathname !== '/app/explore/tweet/' + resultId && url.pathname.startsWith('/app/explore/tweet/'));
+  await page.locator('.page-bar').getByRole('link', { name: 'Back' }).click();
+  await page.waitForURL(origin + '/app/explore/tweet/' + resultId + '?q=rockets');
+  // Updates shows the service status and starts the dashboard actions.
+  await page.getByRole('link', { name: 'Updates' }).click();
+  await page.locator('.status-card', { hasText: 'Up to date. Imported 0 new likes.' }).waitFor();
+  await page.getByRole('button', { name: 'Update now' }).click();
+  await page.getByRole('button', { name: 'Reconnect X' }).click();
+  for (let i = 0; i < 20 && actions.length < 2; i++) await new Promise(r => setTimeout(r, 100));
+  assert.deepEqual(actions, ['update', 'connect']);
+  await page.getByRole('link', { name: 'Likes' }).click();
+  await page.locator('.timeline .tweet').first().waitFor();
   // Phone width keeps the layout inside the screen.
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -131,8 +173,14 @@ try {
   await page.locator('.related-overlay .tweet').first().waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.related-overlay').count(), 0);
+  // The navigation becomes a bottom tab bar, and Explore's graph fits the screen.
+  const bar = await page.locator('.nav').boundingBox();
+  assert.ok(bar.y + bar.height >= 840 && bar.width >= 380, JSON.stringify(bar));
+  await page.goto(origin + '/app/explore/tweet/1005');
+  await page.locator('.graph .node').first().waitFor();
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   assert.deepEqual(errors, []);
-  console.log('PASS: React app unlocks, searches, filters, sorts, scrolls, renders, translates, relates and removes tweets.');
+  console.log('PASS: React app timeline, related, translation, removal, tweet pages, Explore, Updates and phone layout.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

@@ -30,8 +30,13 @@ quotes and articles work. Each tweet has Related (a sidebar on wide screens, ful
 phones), Permalink, a link to X, and Remove (with a confirmation dialog). Tweet and quote
 text translates as it scrolls into view. Each tweet has its own page at `/app/tweet/ID`;
 Permalink keeps the stable `/tweet/ID` address, which still opens the current archive
-until the new app becomes the default. The dashboard and knowledge explorer are not yet
-ported. The Clojure-generated pages remain as a fallback that opens without the server.
+until the new app becomes the default. Navigation follows X: a left menu (icons only when
+narrower, a bottom tab bar on phones) with Likes, Explore and Updates. Explore
+(`/app/explore`) is the knowledge explorer: search by meaning, topic filters, a draggable
+neighborhood graph, and Copy link / Copy Org link using the stable `/knowledge/tweet/ID`
+form. Updates (`/app/updates`) has the dashboard's status and Update now, Reconnect X and
+Finish sign-in. The Clojure-generated pages remain as a fallback that opens without the
+server.
 
 ```bash
 npm ci --prefix web
@@ -165,6 +170,8 @@ web/                      React + Vite archive app served at /app/
   src/tweets.js           Filtering, sorting, links and highlighting
   src/components/         Tweet, related panel, dialog, media, quote and header components
   src/translation.js      Shared, retrying translation requests
+  src/router.js           History routing for /app/, /app/tweet/ID, /app/explore, /app/updates
+  src/pages/              Timeline, tweet, Explore and Updates pages
 service/
   server.mjs              HTTP authentication, protected files, APIs, scheduler
   worker.mjs              Chrome lifecycle, Likes collection, staged imports
