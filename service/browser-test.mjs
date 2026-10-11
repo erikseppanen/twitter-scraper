@@ -15,11 +15,12 @@ try {
   browser = await chromium.launch({ channel: 'chrome', headless: true });
   const page = await browser.newPage();
   await page.goto('http://127.0.0.1:14318/#' + config.token);
-  await page.getByRole('button', { name: 'Update now', exact: true }).waitFor();
+  await page.waitForURL('**/app/');
   assert.equal(new URL(page.url()).hash, '');
+  await page.getByRole('link', { name: 'Updates' }).click();
   await page.getByRole('button', { name: 'Update now', exact: true }).click();
   await page.getByText('Test update completed', { exact: true }).waitFor();
-  await page.getByRole('link', { name: 'Browse archive' }).click();
+  await page.goto('http://127.0.0.1:14318/archive/');
   await page.getByRole('heading', { name: 'Test archive' }).waitFor();
   await writeFile(path.join(root, 'archive/tweets.json'), JSON.stringify([{tweetId:'12'},{tweetId:'11'},{tweetId:'10'}]));
   const state = { baseline: '10' };

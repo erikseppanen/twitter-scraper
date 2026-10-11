@@ -37,7 +37,6 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
   const dashboard = await readFile(new URL('./dashboard.html', import.meta.url));
   const translations = translationService || new Translations(root, stateDir);
   const knowledge = knowledgeIndex || new KnowledgeIndex(root, stateDir);
-  const assets = new Map(await Promise.all(['knowledge.html', 'knowledge.css', 'knowledge-ui.js', 'knowledge-links.js', 'translation-ui.js', 'archive-remove.js'].map(async name => [name, await readFile(new URL('./' + name, import.meta.url))])));
   const background = () => { void knowledge.refresh(); translations.warm().catch(() => {}); };
   if (indexKnowledge) background();
   const knowledgeTimer = indexKnowledge ? setInterval(background, 60000) : null;
@@ -70,7 +69,12 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
         res.writeHead(302, { Location: '/?next=' + encodeURIComponent(url.pathname + url.search) }); return res.end();
       }
       if (!authorized) return reply(401, { error: 'Open your private bookmark to access the archive.' });
-      if (req.method === 'GET' && tweetPage) { res.writeHead(302, { Location: '/archive/?related=' + url.pathname.split('/').at(-1) }); return res.end(); }
+      // Stable links (Permalink, and /knowledge/tweet/ID in saved notes) open the app.
+      if (req.method === 'GET' && (tweetPage || knowledgePage)) {
+        const id = url.pathname.split('/').at(-1);
+        res.writeHead(302, { Location: tweetPage ? '/app/tweet/' + id : '/app/explore' + (/^\d+$/.test(id) ? '/tweet/' + id : '') });
+        return res.end();
+      }
       if (req.method === 'GET' && appPage) {
         if (url.pathname === '/app') { res.writeHead(302, { Location: '/app/' + url.search }); return res.end(); }
         // The React app (web/, built by Vite). Hashed assets are immutable; other paths are app routes.
@@ -86,8 +90,6 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
           return asset ? reply(404, { error: 'Not found' }) : reply(503, 'The web app has not been built. Run npm run build --prefix web.', 'text/plain; charset=utf-8');
         }
       }
-      if (req.method === 'GET' && knowledgePage) return reply(200, assets.get('knowledge.html'), 'text/html; charset=utf-8');
-      if (req.method === 'GET' && ['/knowledge.css', '/knowledge-ui.js', '/knowledge-links.js', '/translation-ui.js', '/archive-remove.js'].includes(url.pathname)) return reply(200, assets.get(url.pathname.slice(1)), mime[path.extname(url.pathname)]);
       if (req.method === 'GET' && url.pathname === '/api/translation') {
         const id = url.searchParams.get('id');
         if (!/^\d+$/.test(id || '')) return reply(400, { error: 'Invalid tweet ID' });
@@ -143,12 +145,11 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
       if (!file.startsWith(archive + path.sep)) return reply(404, { error: 'Not found' });
       const info = await stat(file);
       if (!info.isFile() || !mime[path.extname(file)]) return reply(404, { error: 'Not found' });
-      // Add knowledge and removal actions to previously generated archives without rebuilding stored files.
-      if (path.extname(file) === '.html' && req.method === 'GET') {
-        // The index embeds its data; drop removed tweets as the page assigns it.
+      // The generated pages are a fallback. Their index embeds its data, so drop tweets
+      // removed since the last rebuild as the page assigns it.
+      if (path.extname(file) === '.html' && req.method === 'GET' && removed.size) {
         const hide = `<script>(()=>{const r=new Set(${JSON.stringify([...removed])});let d;Object.defineProperty(window,'TWEET_DATA',{configurable:true,get:()=>d,set:v=>{d=Array.isArray(v)?v.filter(t=>!r.has(String(t.tweetId))):v;}});})();</script>`;
-        const html = (await readFile(file, 'utf8')).replace('</head>', hide + '</head>').replace('</body>', '<script src="/knowledge-links.js"></script><script src="/translation-ui.js"></script><script src="/archive-remove.js"></script></body>');
-        return reply(200, html, mime['.html']);
+        return reply(200, (await readFile(file, 'utf8')).replace('</head>', hide + '</head>'), mime['.html']);
       }
       if (relative === 'tweets.json' && req.method === 'GET' && removed.size) {
         const tweets = JSON.parse(await readFile(file, 'utf8')).filter(t => !removed.has(String(t.tweetId)));

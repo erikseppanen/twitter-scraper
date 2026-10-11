@@ -8,8 +8,8 @@ const root = path.resolve(process.env.ARCHIVE_ROOT || fileURLToPath(new URL('..'
 const port = Number(process.env.PORT || 14330);
 const origin = `http://127.0.0.1:${port}`;
 const stateDir = path.join(root, '.service/knowledge-preview');
-const readOnly = async () => { throw Error('This preview does not run scraping. Use the deployed dashboard.'); };
+const readOnly = async () => { throw Error('This preview does not run scraping. Use Updates on the deployed archive.'); };
 const { server, config } = await createApp({ root, stateDir, publicOrigin: origin, schedule: false, indexKnowledge: true,
   workerFactory: () => ({ busy: false, update: readOnly, connect: readOnly, finish: readOnly }) });
-await writeFile(path.join(stateDir, 'private-link.txt'), `${origin}/?next=%2Fknowledge#${config.token}\n`, { mode: 0o600 });
+await writeFile(path.join(stateDir, 'private-link.txt'), `${origin}/?next=%2Fapp%2Fexplore#${config.token}\n`, { mode: 0o600 });
 server.listen(port, '127.0.0.1', () => console.log(`Knowledge preview listening on ${origin}. Private bookmark: .service/knowledge-preview/private-link.txt`));

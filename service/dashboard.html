@@ -1,18 +1,26 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Twitter archive</title>
-<style>body{font:17px system-ui;max-width:780px;margin:8vh auto;padding:24px;background:#10171c;color:#edf4f6}h1{font-size:38px}p{line-height:1.6;color:#b6c9d0}section{padding:24px;background:#1a262e;border-radius:16px;margin:24px 0}button,a{font:inherit;display:inline-block;padding:12px 16px;border:0;border-radius:8px;margin:6px 8px 6px 0;background:#a6e2cd;color:#102b22;text-decoration:none;cursor:pointer}button:disabled{opacity:.4;cursor:wait}small{display:block;color:#9ab0bd;margin-top:12px}#message{white-space:pre-wrap;overflow-wrap:anywhere}#controls{display:none}</style>
-<h1>Your Twitter archive</h1><p>Your saved likes, with automatic updates every four hours.</p>
-<section><strong id="message">Opening your archive…</strong><small id="dates"></small></section>
-<div id="controls"><a href="/archive/">Browse archive →</a><a href="/app/">Try the new archive →</a><button id="update">Update now</button><button id="connect">Reconnect X</button><button id="finish">Finish sign-in</button><p>Reconnect X opens a dedicated Chrome window on the Mac Mini. Sign in there, then choose Finish sign-in here.</p></div>
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Twitter Likes Archive</title>
+<style>:root{color-scheme:light dark;--bg:#fff;--text:#0f1419;--muted:#536471}@media(prefers-color-scheme:dark){:root{--bg:#000;--text:#e7e9ea;--muted:#71767b}}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}main{max-width:360px;padding:24px;text-align:center}h1{font-size:23px;margin:0 0 8px}p{color:var(--muted);margin:0}</style>
+<main><h1>Twitter Likes Archive</h1><p id="message" role="status">Opening your archive…</p></main>
 <script>
+// The private bookmark carries its secret in the fragment. Exchange it for a session
+// cookie, remove it from the address bar, then open the app or the page that was requested.
 const message = document.querySelector('#message');
-const requestedNext = new URLSearchParams(location.search).get('next') || sessionStorage.getItem('archiveNext');
-const next = /^\/(?:tweet\/\d+|archive\/|app\/[\w\/-]*|knowledge(?:\/tweet\/\d+)?)(?:\?[^#]*)?$/.test(requestedNext || '') ? requestedNext : null;
+const requested = new URLSearchParams(location.search).get('next') || sessionStorage.getItem('archiveNext');
+const next = /^\/(?:tweet\/\d+|archive\/[^#]*|app\/[\w\/-]*|knowledge(?:\/tweet\/\d+)?)(?:\?[^#]*)?$/.test(requested || '') ? requested : null;
 if (next) sessionStorage.setItem('archiveNext', next);
-async function status(){const r=await fetch('/api/status');if(!r.ok){message.textContent='Open your private bookmark to access the archive.';return;}const s=await r.json();document.querySelector('#controls').style.display='block';message.textContent=s.message;document.querySelector('#dates').textContent=`Last success: ${s.lastSuccess?new Date(s.lastSuccess).toLocaleString():'Not yet'} · Next check: ${s.paused?'Paused for sign-in':new Date(s.nextRun).toLocaleString()}`;document.querySelector('#update').disabled=s.busy||s.loginPending;document.querySelector('#connect').disabled=s.busy;}
-for(const action of ['update','connect','finish'])document.getElementById(action).onclick=async()=>{try{const r=await fetch('/api/'+action,{method:'POST'});if(!r.ok)message.textContent=(await r.json()).error;else{message.textContent='Working…';setTimeout(status,500);}}catch{message.textContent='Could not reach the Mini.';}};
-async function unlock(){const token=location.hash.slice(1);if(token){history.replaceState(null,'','/');const r=await fetch('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});if(!r.ok){message.textContent='This private link is invalid.';return;}}await status();if(next && document.querySelector('#controls').style.display==='block'){sessionStorage.removeItem('archiveNext');location.replace(next);}}
-const showConnectionError=()=>{message.textContent='Could not reach the Mini.';};
-window.addEventListener('hashchange',()=>unlock().catch(showConnectionError));
-unlock().catch(showConnectionError);
-setInterval(()=>status().catch(showConnectionError),5000);
+async function unlock() {
+  const token = location.hash.slice(1);
+  if (token) {
+    history.replaceState(null, '', location.pathname + location.search);
+    const response = await fetch('/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+    if (!response.ok) { message.textContent = 'This private link is invalid.'; return; }
+  }
+  const status = await fetch('/api/status');
+  if (!status.ok) { message.textContent = 'Open your private bookmark to access the archive.'; return; }
+  sessionStorage.removeItem('archiveNext');
+  location.replace(next || '/app/');
+}
+const failed = () => { message.textContent = 'Could not reach the Mini.'; };
+addEventListener('hashchange', () => unlock().catch(failed));
+unlock().catch(failed);
 </script></html>

@@ -1,6 +1,7 @@
 # Autonomous archive service
 
-Runs the existing Clojure importer from a Node dashboard and a dedicated Chrome profile.
+Runs the existing Clojure importer from a Node service, with a React app at `/app/` and a
+dedicated Chrome profile.
 Updates run every four hours, with an Update now button. Scraping does not require an LLM.
 The knowledge explorer uses a small local embedding model for semantic search and graph
 neighbors. It downloads model weights on first use and keeps tweet text on this machine.
@@ -25,19 +26,19 @@ restarts after a crash and starts when that user logs in. **After a reboot, the 
 log into macOS**; FileVault and the GUI login cannot be bypassed by this service.
 
 Open **Twitter Archive** on the Mini desktop. Choose **Reconnect X**, sign into X in the
-new normal Chrome window on the Mini, then click **Finish sign-in** on the dashboard.
+new normal Chrome window on the Mini, then click **Finish sign-in** in the app's Updates page.
 Chrome runs without Playwright or remote debugging during sign-in. Automatic checks remain
 paused, including across service restarts, until a subsequent update succeeds. Finish sign-in
 closes only the dedicated Chrome process before verifying the saved session. If the service
 restarted during login, quit that dedicated Chrome instance before choosing Finish sign-in. This is a
 separate browser profile; normal Chrome tabs are unaffected. X may require verification
-or renewed sign-in. The dashboard reports failures and keeps the last successful archive.
+or renewed sign-in. Updates reports failures and the last successful archive is kept.
 
 ## Access
 
 The bookmark's fragment contains a random 256-bit bearer token. It is exchanged for an
 HttpOnly, Secure, SameSite cookie; the browser removes the fragment from its address bar.
-Anyone possessing the link can view the archive and operate the dashboard. Keep it private.
+Anyone possessing the link can view the archive and use its controls. Keep it private.
 All archive files and API routes require authentication. There is no public static-files
 origin. The service listens only on loopback; it requires an HTTPS reverse proxy.
 
@@ -105,7 +106,7 @@ require the same authenticated session as the archive. Stable links never embed 
 
 The cache loader also recovers paths for media already downloaded by older versions, and
 imports now persist those paths. `clojure -M:test` verifies this migration and incremental
-imports. `node service/browser-test.mjs` checks dashboard interactions and collection from
+imports. `node service/browser-test.mjs` checks unlocking, Update now and collection from
 a controlled Likes page in Chrome. `deployed-test.mjs` checks a running Mini deployment;
 provide its `PUBLIC_ORIGIN` environment variable. Do not run its `--connect` option unless
 you intend to open the X sign-in browser.

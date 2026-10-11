@@ -5,7 +5,7 @@ service/README.md before changing the installation or running maintenance.
 
 ## Routine updates
 
-Use the authenticated dashboard's **Update now** action when asked to update likes.
+Use **Update now** on the authenticated app's Updates page (`/app/updates`) when asked to update likes.
 The service already runs every four hours. Do not start a competing browser scraper,
 require the Firefox extension, or ask the user to collect tweet IDs manually.
 

@@ -103,7 +103,7 @@ test('removing a tweet hides it at once, keeps it out of updates, and starts a p
   for (const file of ['tweets/10.html', 'media/10_0.jpg']) assert.equal((await fetch(url + '/archive/' + file, { headers })).status, 404);
   assert.equal((await fetch(url + '/archive/tweets/20.html', { headers })).status, 200);
   const index = await (await fetch(url + '/archive/', { headers })).text();
-  assert.match(index, /new Set\(\["10"\]\).*<\/head>/); assert.match(index, /archive-remove\.js/);
+  assert.match(index, /new Set\(\["10"\]\).*<\/head>/); assert.doesNotMatch(index, /<script src=/);
 });
 
 test('purge publishes only a staged archive without the removed tweets', async t => {

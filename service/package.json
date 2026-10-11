@@ -6,7 +6,7 @@
     "start": "node server.mjs",
     "test": "node --test test.mjs knowledge-test.mjs translation-test.mjs",
     "test:quotes": "node quote-media-test.mjs",
-    "test:knowledge": "node knowledge-browser-test.mjs",
+    "test:knowledge": "npm run build --prefix ../web && node knowledge-browser-test.mjs",
     "test:web": "npm run build --prefix ../web && node web-browser-test.mjs"
   },
   "dependencies": {

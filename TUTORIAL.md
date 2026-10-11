@@ -2,19 +2,19 @@
 
 ## Everyday use
 
-Open your saved private bookmark. Choose **Browse archive** to search and filter tweets.
-Updates run automatically every four hours while the Mini service is running. Use
-**Update now** on the dashboard when you want to check sooner. The dashboard shows the
-last result and any error that needs attention.
+Open your saved private bookmark; it opens your likes. Updates run automatically every
+four hours while the Mini service is running. Choose **Updates** in the menu (the circular
+arrows on a phone) and then **Update now** when you want to check sooner. Updates shows
+the last result and any error that needs attention.
 
 No Firefox extension, manual ID export, or Claude scraping session is required.
 The service uses its own Chrome profile and invokes the Clojure importer internally.
 
 If X asks you to sign in again:
 
-1. Choose **Reconnect X** on the dashboard.
+1. Choose **Reconnect X** in Updates.
 2. Sign into X in the dedicated Chrome window on the Mini.
-3. Choose **Finish sign-in** on the dashboard.
+3. Choose **Finish sign-in** in Updates.
 
 Automatic checks stay paused during sign-in. Your ordinary Chrome windows can stay open.
 After the Mini reboots, log into its macOS account so the LaunchAgent can start.
@@ -25,17 +25,23 @@ The current Mini installation uses Tailscale Funnel on HTTPS port 8443. Your vie
 device does not need Tailscale. Use your saved private link to establish access;
 opening the bare address in a new browser does not sign you in.
 
-Anyone with that link can view the archive and operate its dashboard. Keep it private.
+Anyone with that link can view the archive and use its controls. Keep it private.
 For configuration and token rotation, see [service operations](service/README.md).
 
 ## Browsing
 
-- Search tweet text, author names/handles, and article titles.
-- Filter by year, month, or author; switch between newest and oldest first.
-- Use **Show more** for long tweets and **View page** for an individual page.
-- Quoted photos, videos, and GIFs appear inside quoted cards.
-- Use the theme button for light or dark mode.
-- Choose **Remove**, then **Confirm remove**, to delete a tweet from the archive. It
+- Search tweet text, author names/handles, and article titles. Your search, filters
+  and sort stay in the address, so reloading or sharing the link keeps them.
+- Filter by year, month, or author (or select an @handle); switch between newest and
+  oldest first.
+- Use **Show more** for long tweets. Select a tweet's date or **Permalink** for its own
+  page with related likes.
+- **Related** shows similar likes: in a sidebar on wide screens, full screen on phones.
+- **Explore** searches by meaning and shows a graph of related ideas, with **Copy link**
+  and **Copy Org link** for notes.
+- Non-English text appears in English; select the note above it to see the original.
+- Use the half-circle in the menu for light or dark mode.
+- Choose **Remove**, then confirm, to delete a tweet from the archive. It
   disappears at once; the service then deletes its page and any media no other tweet uses.
   Removed IDs are kept in `.service/removed.json` and `archive/.removed-ids`, so updates and
   imports never add them back. There is no undo button; `archive-previous` holds the

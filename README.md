@@ -6,37 +6,32 @@ content, download media, and generate searchable HTML. No LLM or browser extensi
 
 ## Everyday use
 
-Open your saved private bookmark, then choose **Browse archive** or **Update now**.
-Automatic checks run approximately every four hours while the service is running. Search,
-year/month/author filters, sorting, and light/dark themes are available in the archive.
-Individual tweet and article pages include downloaded media; quoted photos, videos, and
-GIFs appear inside quoted cards. **Remove** on any tweet deletes it, with its page and
-unshared media, and keeps it from being re-imported (see the [everyday guide](TUTORIAL.md#browsing)).
+Open your saved private bookmark; it signs you in and opens the archive app. The app
+follows X's layout: **Likes** (your timeline), **Explore** and **Updates** in a left menu,
+or a bottom tab bar on phones. Automatic checks run approximately every four hours while
+the service is running; **Updates** has **Update now** and the X sign-in controls.
 
-If X requires a new login, choose **Reconnect X**, sign into the dedicated Chrome window
-on the Mini, then choose **Finish sign-in**. Automatic checks pause during sign-in. Your
-ordinary Chrome windows can stay open. After a reboot, log into the Mini's macOS account
-so the service can start.
+In **Likes**, search, filter by year, month or author, sort, and switch light/dark themes.
+Each tweet has **Related** (similar likes, in a sidebar on wide screens), **Permalink**
+(its own page at `/app/tweet/ID`), a link to X, and **Remove**. Remove deletes the tweet,
+its page and unshared media, and keeps it from being re-imported (see the
+[everyday guide](TUTORIAL.md#browsing)). Non-English tweet and quote text is shown in
+English with a toggle back to the original.
 
-See the [everyday guide](TUTORIAL.md) for browsing, backups, and recovery.
+If X requires a new login, choose **Reconnect X** in Updates, sign into the dedicated
+Chrome window on the Mini, then choose **Finish sign-in**. Automatic checks pause during
+sign-in. Your ordinary Chrome windows can stay open. After a reboot, log into the Mini's
+macOS account so the service can start.
 
-## New archive app (in progress)
+The Clojure-generated pages remain at `/archive/` as a plain fallback that also opens
+from disk without the server. See the [everyday guide](TUTORIAL.md) for browsing,
+backups, and recovery.
 
-A React rewrite of the archive is served at `/app/` alongside the current archive; the
-dashboard links to it as **Try the new archive**. It is plain JavaScript built with Vite,
-styled after X's timeline, and loads `archive/tweets.json` through the same private-link
-login. Search, year/month/author filters, sorting, infinite scrolling, themes, media,
-quotes and articles work. Each tweet has Related (a sidebar on wide screens, full screen on
-phones), Permalink, a link to X, and Remove (with a confirmation dialog). Tweet and quote
-text translates as it scrolls into view. Each tweet has its own page at `/app/tweet/ID`;
-Permalink keeps the stable `/tweet/ID` address, which still opens the current archive
-until the new app becomes the default. Navigation follows X: a left menu (icons only when
-narrower, a bottom tab bar on phones) with Likes, Explore and Updates. Explore
-(`/app/explore`) is the knowledge explorer: search by meaning, topic filters, a draggable
-neighborhood graph, and Copy link / Copy Org link using the stable `/knowledge/tweet/ID`
-form. Updates (`/app/updates`) has the dashboard's status and Update now, Reconnect X and
-Finish sign-in. The Clojure-generated pages remain as a fallback that opens without the
-server.
+## Archive app
+
+The app in `web/` is React and plain JavaScript built with Vite, styled after X, and
+served at `/app/` behind the private-link login. It loads `archive/tweets.json` and uses the
+service APIs for related tweets, translation, removal and updates.
 
 ```bash
 npm ci --prefix web
@@ -50,10 +45,11 @@ once to sign in, then run `npm run dev --prefix web` and open `http://127.0.0.1:
 
 ## Knowledge explorer
 
-Choose **Explore knowledge** on the dashboard, or **Explore related** on any archived
-tweet. This view adds:
+Choose **Explore** in the app (`/app/explore`), or **Related** on any tweet there. Explore
+adds:
 
-- Stable links at `/knowledge/tweet/TWEET_ID`, with **Copy link** and **Copy Org link**.
+- Stable links at `/knowledge/tweet/TWEET_ID`, with **Copy link** and **Copy Org link**;
+  they open the tweet in Explore.
   Org links use `[[https://YOUR-HOST/knowledge/tweet/123][description]]`. The host must
   remain stable for saved links to keep working. Links contain no access credential;
   a browser without a session is directed to unlock with its private bookmark and then
@@ -62,7 +58,7 @@ tweet. This view adds:
   match a related idea without sharing its exact words.
 - A graph centered on a selected tweet and up to twelve semantic neighbors. Click a
   node to explore its neighborhood, use the related-ideas list or keyboard navigation,
-  and pan/zoom or choose **Fit graph**. Edges represent model similarity, not citations.
+  and drag to pan or choose **Fit graph**. Edges represent model similarity, not citations.
 - Suggested topic filters. These are approximate classifications from a fixed topic
   list, not manually curated categories or factual judgments.
 
@@ -101,7 +97,7 @@ flowchart TD
     Server --> Schedule
 ```
 
-- **Node service:** serves the dashboard and protected archive, persists status, and checks
+- **Node service:** serves the app and protected archive, persists status, and checks
   every 30 seconds whether an update is due. Each attempt schedules the next check four
   hours after it finishes. Only one update or sign-in runs at a time.
 - **Browser worker:** launches installed Google Chrome using a separate profile in
@@ -133,11 +129,11 @@ The current Mini deployment uses **Tailscale Funnel on HTTPS port 8443**, forwar
 the Node service on **127.0.0.1:4318**. Viewing devices do not need Tailscale installed.
 Tailscale Serve is an alternative for deployments restricted to a tailnet.
 
-The saved bookmark carries a random secret in its URL fragment. The dashboard exchanges
+The saved bookmark carries a random secret in its URL fragment. The unlock page exchanges
 it for an HttpOnly, Secure, SameSite cookie and removes the fragment from the address bar.
-The dashboard shell is publicly reachable; archive files, status, and control actions
+The unlock page is publicly reachable; the app, archive files, status, and control actions
 require authentication. Anyone holding the private link can view the archive and operate
-the dashboard. This is bearer-link access, not individual user accounts.
+its controls. This is bearer-link access, not individual user accounts.
 
 `PUBLIC_ORIGIN` must match the external HTTPS origin, including the port. Keep the archive
 behind the authenticated server; do not publish its directory as an unprotected static site.
@@ -175,7 +171,7 @@ web/                      React + Vite archive app served at /app/
 service/
   server.mjs              HTTP authentication, protected files, APIs, scheduler
   worker.mjs              Chrome lifecycle, Likes collection, staged imports
-  dashboard.html          Private-link login, status, update and sign-in controls
+  dashboard.html          Private-link unlock page; opens the app
   *test.mjs               Service, browser, and deployment checks
 scripts/
   install-mini.sh         macOS LaunchAgent and private bookmark installer

@@ -41,12 +41,15 @@ test('knowledge routes protect data, deep links preserve destination, and assets
   t.after(async () => { await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true }); });
   const origin = 'http://127.0.0.1:' + server.address().port;
   assert.equal((await fetch(origin + '/api/knowledge/search?q=private')).status, 401);
-  assert.equal((await fetch(origin + '/knowledge-ui.js')).status, 401);
   const redirect = await fetch(origin + '/knowledge/tweet/1', { redirect: 'manual' });
   assert.equal(redirect.status, 302);
   assert.equal(redirect.headers.get('location'), '/?next=%2Fknowledge%2Ftweet%2F1');
   const headers = { Cookie: '__Host-archive=' + config.token };
-  assert.equal((await fetch(origin + '/knowledge/tweet/1', { headers })).status, 200);
+  // Saved note links open the tweet in the app's Explore page.
+  for (const [from, to] of [['/knowledge/tweet/1', '/app/explore/tweet/1'], ['/knowledge', '/app/explore'], ['/tweet/1', '/app/tweet/1']]) {
+    const response = await fetch(origin + from, { headers, redirect: 'manual' });
+    assert.equal(response.status, 302); assert.equal(response.headers.get('location'), to);
+  }
   assert.equal((await fetch(origin + '/api/knowledge/graph?id=1', { headers })).status, 200);
   assert.equal((await fetch(origin + '/api/knowledge/graph?id=9', { headers })).status, 404);
   assert.equal((await fetch(origin + '/api/knowledge/search?q=' + 'a'.repeat(2001), { headers })).status, 400);

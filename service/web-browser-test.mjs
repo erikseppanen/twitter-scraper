@@ -26,6 +26,7 @@ tweets[2].text = 'Je voudrais présenter mes nouvelles idées pour améliorer no
 await mkdir(path.join(root, 'archive/media'), { recursive: true });
 await writeFile(path.join(root, 'archive/tweets.json'), JSON.stringify(tweets));
 await writeFile(path.join(root, 'archive/media/photo.png'), png);
+await writeFile(path.join(root, 'archive/index.html'), '<html><head></head><body>Generated archive</body></html>');
 const port = 14328, origin = 'http://127.0.0.1:' + port;
 // Neighbors are the next two tweets; the translator is a slow stand-in for the local model.
 const searches = [];
@@ -55,6 +56,12 @@ try {
   assert.equal(await page.locator('.tweet').count(), 50);
   assert.match(await page.locator('.status').textContent(), /Showing 50 of 60 \(matching "rockets"\) from 120 tweets/);
   assert.equal(await page.locator('.tweet mark').first().textContent(), 'rockets');
+  // With a session, the bookmark's page opens the app; the generated archive remains as
+  // a plain fallback without the old add-on scripts.
+  await page.goto(origin + '/');
+  await page.waitForURL(origin + '/app/');
+  await page.goto(origin + '/app/?query=rockets');
+  await page.locator('.tweet').first().waitFor();
   // Clearing restores everything; scrolling loads more.
   await page.getByRole('button', { name: 'Clear' }).click();
   await page.waitForFunction(() => document.querySelector('.tweet')?.id === 'tweet-1000');
@@ -112,6 +119,8 @@ try {
   assert.equal(await page.locator('.timeline #tweet-1000 a.action', { hasText: 'Permalink' }).getAttribute('href'), '/tweet/1000');
   await page.goBack();
   await page.locator('.timeline #tweet-1000').waitFor();
+  const fallback = await (await page.request.get(origin + '/archive/')).text();
+  assert.match(fallback, /Generated archive/); assert.doesNotMatch(fallback, /<script src=/);
   await page.reload();
   await page.locator('.status', { hasText: 'from 119 tweets' }).waitFor();
   // Author, year/month and sort controls; the URL keeps the view.
