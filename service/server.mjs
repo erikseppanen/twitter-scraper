@@ -13,7 +13,7 @@ export function equal(a, b) {
 }
 const webDist = fileURLToPath(new URL('../web/dist/', import.meta.url));
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.mp4': 'video/mp4', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
-export async function createApp({ root, stateDir, publicOrigin, workerFactory, schedule = true, knowledgeIndex, indexKnowledge = schedule }) {
+export async function createApp({ root, stateDir, publicOrigin, workerFactory, schedule = true, knowledgeIndex, translations: translationService, indexKnowledge = schedule }) {
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   // Recover the small publication rename window after an unexpected shutdown.
   try { await stat(path.join(root, 'archive')); }
@@ -35,7 +35,7 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
   const secure = publicOrigin.startsWith('https:');
   const cookieName = secure ? '__Host-archive' : 'archive';
   const dashboard = await readFile(new URL('./dashboard.html', import.meta.url));
-  const translations = new Translations(root, stateDir);
+  const translations = translationService || new Translations(root, stateDir);
   const knowledge = knowledgeIndex || new KnowledgeIndex(root, stateDir);
   const assets = new Map(await Promise.all(['knowledge.html', 'knowledge.css', 'knowledge-ui.js', 'knowledge-links.js', 'translation-ui.js', 'archive-remove.js'].map(async name => [name, await readFile(new URL('./' + name, import.meta.url))])));
   const background = () => { void knowledge.refresh(); translations.warm().catch(() => {}); };

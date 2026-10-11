@@ -26,9 +26,12 @@ A React rewrite of the archive is served at `/app/` alongside the current archiv
 dashboard links to it as **Try the new archive**. It is plain JavaScript built with Vite,
 styled after X's timeline, and loads `archive/tweets.json` through the same private-link
 login. Search, year/month/author filters, sorting, infinite scrolling, themes, media,
-quotes and articles work; Related, translation, Remove and the dashboard still use the
-current archive until they are ported. The Clojure-generated pages remain as a fallback
-that opens without the server.
+quotes and articles work. Each tweet has Related (a sidebar on wide screens, full screen on
+phones), Permalink, a link to X, and Remove (with a confirmation dialog). Tweet and quote
+text translates as it scrolls into view. Each tweet has its own page at `/app/tweet/ID`;
+Permalink keeps the stable `/tweet/ID` address, which still opens the current archive
+until the new app becomes the default. The dashboard and knowledge explorer are not yet
+ported. The Clojure-generated pages remain as a fallback that opens without the server.
 
 ```bash
 npm ci --prefix web
@@ -160,7 +163,8 @@ a required part of the automated service; removing the old extension does not re
 ```text
 web/                      React + Vite archive app served at /app/
   src/tweets.js           Filtering, sorting, links and highlighting
-  src/components/         Tweet, media, quote, article and header components
+  src/components/         Tweet, related panel, dialog, media, quote and header components
+  src/translation.js      Shared, retrying translation requests
 service/
   server.mjs              HTTP authentication, protected files, APIs, scheduler
   worker.mjs              Chrome lifecycle, Likes collection, staged imports

@@ -1,18 +1,20 @@
-import RichText from './RichText.jsx';
+import TweetText from './TweetText.jsx';
 import Media from './Media.jsx';
+import Avatar from './Avatar.jsx';
 
-export default function QuoteCard({ quote, query }) {
+export default function QuoteCard({ quote, parentId, query }) {
   if (!quote) return null;
   const user = quote.user || {};
   const href = quote.article ? '/archive/articles/' + quote.tweetId + '.html' : 'https://x.com/i/status/' + quote.tweetId;
   return (
     <div className="quote-card">
       <a className="quote-header" href={href} target="_blank" rel="noopener noreferrer">
-        {user.profileImage && <img className="quote-avatar" src={user.profileImage} alt="" loading="lazy" />}
+        <Avatar src={user.profileImage} className="quote-avatar" />
         <span className="display-name">{user.name || user.screenName}</span>
         {user.screenName && <span className="secondary">@{user.screenName}</span>}
       </a>
-      {quote.text && <div className="quote-text"><RichText text={quote.text} query={query} /></div>}
+      {/* Quote translations are looked up through the tweet that quotes them. */}
+      {quote.text && <TweetText className="quote-text" tweetId={parentId} quoted text={quote.text} query={query} clampLong={false} />}
       <Media media={quote.media} />
       {quote.article && (
         <a className="quote-article" href={href} target="_blank" rel="noopener noreferrer">

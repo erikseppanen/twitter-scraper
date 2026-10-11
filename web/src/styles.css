@@ -7,6 +7,7 @@
   --text-secondary: #536471;
   --border: #eff3f4;
   --accent: #1d9bf0;
+  --danger: #f4212e;
   --mark-bg: #fff3cd;
   --mark-text: #0f1419;
   color-scheme: light;
@@ -37,9 +38,12 @@ a:hover { text-decoration: underline; }
 button, select, input { font: inherit; color: inherit; }
 mark { background: var(--mark-bg); color: var(--mark-text); border-radius: 2px; }
 
-.layout {
+/* Timeline column, plus a right sidebar on wide screens like X. */
+.shell { display: flex; justify-content: center; align-items: flex-start; gap: 24px; }
+.timeline {
+  width: 100%;
   max-width: 600px;
-  margin: 0 auto;
+  min-width: 0;
   min-height: 100vh;
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
@@ -59,9 +63,11 @@ mark { background: var(--mark-bg); color: var(--mark-text); border-radius: 2px; 
 .header-top { display: flex; align-items: center; justify-content: space-between; }
 .page-header h1 { font-size: 20px; line-height: 24px; font-weight: 800; margin: 0; }
 .icon-button {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   width: 36px; height: 36px; border-radius: 50%;
-  border: 0; background: transparent; cursor: pointer; font-size: 18px;
+  border: 0; background: transparent; color: var(--text); cursor: pointer; font-size: 18px;
 }
+.icon-button:hover { text-decoration: none; }
 .icon-button:hover { background: var(--bg-hover); }
 .search { margin: 8px 0; }
 .search input {
@@ -98,9 +104,10 @@ mark { background: var(--mark-bg); color: var(--mark-text); border-radius: 2px; 
   transition: background-color 0.2s;
 }
 .tweet:hover { background: var(--bg-hover); }
-.tweet-avatar img, .avatar-placeholder {
-  display: block; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: var(--bg-input);
-}
+.tweet.active { box-shadow: inset 3px 0 0 var(--accent); }
+.tweet.full .tweet-text .text { font-size: 17px; line-height: 24px; }
+.avatar { display: block; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+.avatar-placeholder { display: block; background: var(--bg-input); }
 .tweet-body { flex: 1; min-width: 0; }
 .tweet-header { display: flex; align-items: baseline; gap: 4px; min-width: 0; white-space: nowrap; }
 .display-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -110,8 +117,24 @@ mark { background: var(--mark-bg); color: var(--mark-text); border-radius: 2px; 
 .date { flex-shrink: 0; }
 .x-link { margin-left: auto; padding-left: 8px; color: var(--text-secondary); }
 .x-link:hover { color: var(--accent); text-decoration: none; }
-.tweet-text { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tweet-text.clamped { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.text { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.text.clamped { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.translation-note {
+  display: block; border: 0; background: none; padding: 2px 0; margin-top: 2px;
+  color: var(--accent); font-size: 13px; cursor: pointer; text-align: left;
+}
+span.translation-note { color: var(--text-secondary); cursor: default; }
+.translation-note:is(button):hover { text-decoration: underline; }
+
+/* Action row, like X's reply/repost/like row. */
+.actions { display: flex; justify-content: space-between; max-width: 425px; margin: 8px 0 -4px -6px; }
+.action {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 6px; border: 0; border-radius: 9999px; background: none;
+  color: var(--text-secondary); font-size: 13px; cursor: pointer;
+}
+.action:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); text-decoration: none; }
+.action.remove:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .show-more { border: 0; background: none; padding: 0; margin-top: 2px; color: var(--accent); cursor: pointer; }
 .show-more:hover { text-decoration: underline; }
 
@@ -145,7 +168,7 @@ mark { background: var(--mark-bg); color: var(--mark-text); border-radius: 2px; 
 .quote-card .media-grid { margin-top: 8px; border-radius: 12px; }
 .quote-header { display: flex; align-items: center; gap: 4px; color: inherit; white-space: nowrap; min-width: 0; }
 .quote-header:hover { text-decoration: none; }
-.quote-avatar { width: 20px; height: 20px; border-radius: 50%; }
+.quote-avatar { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; }
 .quote-text { margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .article-card:hover, .quote-article:hover { text-decoration: none; background: var(--bg-hover); }
 .article-cover { display: block; width: 100%; max-height: 260px; object-fit: cover; }
@@ -157,9 +180,59 @@ mark { background: var(--mark-bg); color: var(--mark-text); border-radius: 2px; 
 .quote-article > div { padding: 8px 8px 8px 0; min-width: 0; }
 .quote-article .article-title, .quote-article .article-preview { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
+/* Related likes */
+.related { min-width: 0; background: var(--bg); }
+.related-sidebar {
+  position: sticky; top: 0; width: 350px; max-height: 100vh; overflow-y: auto; flex-shrink: 0;
+  margin-top: 12px; border: 1px solid var(--border); border-radius: 16px; overscroll-behavior: contain;
+}
+.related-overlay { position: fixed; inset: 0; z-index: 30; overflow-y: auto; overscroll-behavior: contain; }
+.related-inline { border-top: 8px solid var(--bg-input); }
+.related-bar {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
+}
+.related-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; padding-left: 4px; }
+.related-title h2 { margin: 0; font-size: 20px; font-weight: 800; }
+.related-title .secondary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.related-message, .related-note, .related-hint p { margin: 0; padding: 16px; color: var(--text-secondary); }
+.related-note { font-size: 13px; }
+.related-hint { padding: 0; }
+.related-sidebar .tweet { padding: 12px; }
+.related-sidebar .media-count-1 .media-item img, .related-sidebar .media-count-1 .media-item video { max-height: 280px; }
+body.no-scroll { overflow: hidden; }
+
+/* Single tweet page */
+.page-bar { display: flex; align-items: center; gap: 16px; padding: 6px 16px; }
+
+/* Remove confirmation, styled like X's dialogs */
+.dialog {
+  width: min(320px, calc(100vw - 32px)); padding: 32px; border: 0; border-radius: 16px;
+  background: var(--bg); color: var(--text);
+}
+.dialog::backdrop { background: rgba(91, 112, 131, 0.4); }
+.dialog h2 { margin: 0 0 8px; font-size: 20px; line-height: 24px; font-weight: 800; }
+.dialog p { margin: 0 0 24px; color: var(--text-secondary); }
+.button { display: block; width: 100%; height: 44px; margin-top: 12px; border-radius: 9999px; font-weight: 700; cursor: pointer; }
+.button:disabled { opacity: 0.6; cursor: default; }
+.button.danger { border: 0; background: var(--danger); color: #fff; }
+.button.outline { border: 1px solid var(--border); background: transparent; }
+.button.outline:hover { background: var(--bg-hover); }
+
+.toast {
+  position: fixed; left: 50%; bottom: 24px; z-index: 40; transform: translateX(-50%);
+  padding: 12px 16px; border-radius: 6px; background: var(--accent); color: #fff; font-weight: 600;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
 .empty { padding: 32px 16px; text-align: center; color: var(--text-secondary); }
 
+@media (max-width: 999px) {
+  .shell { display: block; }
+  .timeline { margin: 0 auto; }
+}
 @media (max-width: 600px) {
-  .layout { border: 0; }
+  .timeline { border: 0; }
   .controls select, .pill { font-size: 13px; padding: 0 10px; }
 }
