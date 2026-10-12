@@ -1,7 +1,7 @@
 (require '[clojure.edn :as edn]
          '[twitter-scraper.core :as core]
          '[twitter-scraper.fetcher :as fetcher]
-         '[twitter-scraper.html :as html])
+         '[twitter-scraper.output :as output])
 (let [[output selected-id] *command-line-args*
       tweets (core/load-cache output)
       retry-ids (when (= selected-id "retry")
@@ -25,8 +25,7 @@
                     (do (swap! counts update :unavailable conj (:tweet-id tweet)) tweet)))
                 tweet)) tweets)]
   (core/save-cache updated output)
-  (html/copy-css output)
-  (html/generate-all-pages updated output {})
+  (output/write-archive updated output)
   (spit (str output "/quote-repair-report.edn") (pr-str @counts))
   (println "Quote repair complete:" @counts))
 (shutdown-agents)

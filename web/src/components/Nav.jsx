@@ -10,7 +10,7 @@ const ITEMS = [
 
 // X-style navigation: labeled on wide screens, icons when narrower, a tab bar on phones.
 export default function Nav({ page, theme, toggleTheme }) {
-  const current = page === 'tweet' ? 'timeline' : page;
+  const current = page === 'tweet' || page === 'article' ? 'timeline' : page;
   return (
     <nav className="nav" aria-label="Main">
       {ITEMS.map(([key, href, label, Icon]) => (

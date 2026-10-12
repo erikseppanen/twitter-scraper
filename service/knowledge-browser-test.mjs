@@ -17,7 +17,6 @@ const tweets = [
 ].map(([tweetId, text]) => ({ tweetId, text, user: { name: 'Example author', screenName: 'example' }, createdAt: '2026-01-01T00:00:00Z' }));
 await mkdir(path.join(root, 'archive/tweets'), { recursive: true });
 await writeFile(path.join(root, 'archive/tweets.json'), JSON.stringify(tweets));
-await writeFile(path.join(root, 'archive/index.html'), '<html><body><article id="tweet-1"><footer></footer></article></body></html>');
 for (const tweet of tweets) await writeFile(path.join(root, 'archive/tweets', tweet.tweetId + '.html'), '<html><body>Fixture</body></html>');
 // Model weights are reusable and private; no fixture text is sent to the model host.
 const stateDir = path.resolve('.service/knowledge-test');

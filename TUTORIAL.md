@@ -41,13 +41,14 @@ For configuration and token rotation, see [service operations](service/README.md
   shuffled timeline opens it with the same filters and order.
 - Use **Show more** for long tweets. Select a tweet's date or **Permalink** for its own
   page with related likes.
+- Select an article card to read the article in the app, with its images.
 - **Related** shows similar likes: in a sidebar on wide screens, full screen on phones.
 - **Explore** searches by meaning and shows a graph of related ideas, with **Copy link**
   and **Copy Org link** for notes.
 - Non-English text appears in English; select the note above it to see the original.
 - Use the half-circle in the menu for light or dark mode.
 - Choose **Remove**, then confirm, to delete a tweet from the archive. It
-  disappears at once; the service then deletes its page and any media no other tweet uses.
+  disappears at once; the service then deletes its data and any media no other tweet uses.
   Removed IDs are kept in `.service/removed.json` and `archive/.removed-ids`, so updates and
   imports never add them back. There is no undo button; `archive-previous` holds the
   version before the most recent change.
@@ -60,15 +61,12 @@ Back up the **entire `archive/` directory**, including hidden files:
 archive/
 ├── .tweet-cache.edn    Tweet metadata, text, and media references
 ├── media/             Downloaded photos, videos, and GIFs
-├── articles/          Article pages and downloaded article images
-├── tweets/            Individual tweet pages
-├── tweets.json        Data for consumers of the archive
-├── index.html         Browsable archive
-└── style.css
+├── articles/          Article text (ID.json) and downloaded article images
+└── tweets.json        Tweet data the app loads
 ```
 
-The cache does not contain image or video bytes. HTML and JSON can be regenerated
-from the cache; missing media requires downloading from its source again, which may
+The cache does not contain image or video bytes. The JSON files can be regenerated
+from the cache with `--rebuild`; missing media requires downloading from its source again, which may
 no longer be available. A cache-only backup is incomplete. Keep an independent private
 backup; `archive-previous` is a rollback copy, not a complete backup strategy.
 
@@ -131,11 +129,11 @@ clj -M -m twitter-scraper.core --refetch-failed --output ./archive-repair
 This retries cached entries with missing text or author information. It cannot restore
 permanently unavailable source content.
 
-### Rebuild pages or retry media downloads
+### Rebuild app data or retry media downloads
 
 ```bash
-# Rebuild HTML/JSON without network access
-clj -M -m twitter-scraper.core --input ~/twitter-archive --output ./archive-repair --skip-fetch --skip-media
+# Rewrite tweets.json and article files from the cache, without network access
+clj -M -m twitter-scraper.core --rebuild --output ./archive-repair
 
 # Reuse cached tweet data and download missing media
 clj -M -m twitter-scraper.core --input ~/twitter-archive --output ./archive-repair --skip-fetch

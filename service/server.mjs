@@ -1,7 +1,8 @@
 import http from 'node:http';
 import { readFile, mkdir, stat, realpath, rename } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual, createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker, atomicJSON } from './worker.mjs';
@@ -13,6 +14,23 @@ export function equal(a, b) {
 }
 const webDist = fileURLToPath(new URL('../web/dist/', import.meta.url));
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.mp4': 'video/mp4', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
+// Text bodies are compressed once and reused. The ETag lets a browser keep its copy
+// and ask whether it is still current instead of downloading it again.
+export function cacheEntry(body) {
+  body = Buffer.from(body);
+  return { body, gzip: gzipSync(body), etag: '"' + createHash('sha256').update(body).digest('base64url').slice(0, 27) + '"' };
+}
+export function sendEntry(req, res, entry, type, cacheControl) {
+  res.setHeader('Cache-Control', cacheControl);
+  res.setHeader('ETag', entry.etag);
+  res.setHeader('Vary', 'Accept-Encoding');
+  if ((req.headers['if-none-match'] || '').split(/\s*,\s*/).includes(entry.etag)) { res.writeHead(304); return res.end(); }
+  const gzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+  const body = gzip ? entry.gzip : entry.body;
+  res.writeHead(200, { 'Content-Type': type, 'Content-Length': body.length, ...(gzip && { 'Content-Encoding': 'gzip' }) });
+  res.end(req.method === 'HEAD' ? undefined : body);
+}
+
 export async function createApp({ root, stateDir, publicOrigin, workerFactory, schedule = true, knowledgeIndex, translations: translationService, indexKnowledge = schedule }) {
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
   // Recover the small publication rename window after an unexpected shutdown.
@@ -40,6 +58,23 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
   const background = () => { void knowledge.refresh(); translations.warm().catch(() => {}); };
   if (indexKnowledge) background();
   const knowledgeTimer = indexKnowledge ? setInterval(background, 60000) : null;
+  // tweets.json without removed tweets, rebuilt only when the file or the removed list changes.
+  let archiveData = null;
+  const tweetsEntry = async (file, info) => {
+    const key = `${info.mtimeMs}:${info.size}:${removed.size}`;
+    if (archiveData?.key !== key) {
+      let body = await readFile(file);
+      if (removed.size) body = JSON.stringify(JSON.parse(body).filter(t => !removed.has(String(t.tweetId))));
+      archiveData = { key, ...cacheEntry(body) };
+    }
+    return archiveData;
+  };
+  const appFiles = new Map();
+  const appEntry = async name => {
+    const file = path.join(webDist, name), { mtimeMs } = await stat(file);
+    if (appFiles.get(name)?.mtimeMs !== mtimeMs) appFiles.set(name, { mtimeMs, ...cacheEntry(await readFile(file)) });
+    return appFiles.get(name);
+  };
   const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Referrer-Policy', 'no-referrer');
@@ -80,11 +115,9 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
         // The React app (web/, built by Vite). Hashed assets are immutable; other paths are app routes.
         const asset = /^\/app\/(assets\/[\w.-]+)$/.exec(url.pathname)?.[1];
         try {
-          if (!asset) return reply(200, await readFile(path.join(webDist, 'index.html')), mime['.html']);
+          if (!asset) return sendEntry(req, res, await appEntry('index.html'), mime['.html'], 'no-cache');
           if (!mime[path.extname(asset)]) return reply(404, { error: 'Not found' });
-          const body = await readFile(path.join(webDist, asset));
-          res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
-          return reply(200, body, mime[path.extname(asset)]);
+          return sendEntry(req, res, await appEntry(asset), mime[path.extname(asset)], 'private, max-age=31536000, immutable');
         } catch (e) {
           if (e.code !== 'ENOENT') throw e;
           return asset ? reply(404, { error: 'Not found' }) : reply(503, 'The web app has not been built. Run npm run build --prefix web.', 'text/plain; charset=utf-8');
@@ -137,24 +170,18 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
       }
       if (!['GET', 'HEAD'].includes(req.method)) return reply(405, { error: 'Method not allowed' });
       if (!url.pathname.startsWith('/archive/')) return reply(404, { error: 'Not found' });
-      const relative = decodeURIComponent(url.pathname.slice('/archive/'.length)) || 'index.html';
+      // Article pages moved into the app; links saved before then still work.
+      const oldArticle = /^\/archive\/articles\/(\d+)\.html$/.exec(url.pathname)?.[1];
+      if (oldArticle) { res.writeHead(302, { Location: '/app/article/' + oldArticle }); return res.end(); }
+      const relative = decodeURIComponent(url.pathname.slice('/archive/'.length));
       if (relative.split('/').some(part => part.startsWith('.')) || relative.includes('\\')) return reply(404, { error: 'Not found' });
-      if (removed.has(/^(?:tweets|articles|media)\/(\d+)[._-]/.exec(relative)?.[1])) return reply(404, { error: 'Not found' });
+      if (removed.has(/^(?:articles|media)\/(\d+)[._-]/.exec(relative)?.[1])) return reply(404, { error: 'Not found' });
       const archive = await realpath(path.join(root, 'archive'));
       const file = await realpath(path.resolve(archive, relative));
       if (!file.startsWith(archive + path.sep)) return reply(404, { error: 'Not found' });
       const info = await stat(file);
       if (!info.isFile() || !mime[path.extname(file)]) return reply(404, { error: 'Not found' });
-      // The generated pages are a fallback. Their index embeds its data, so drop tweets
-      // removed since the last rebuild as the page assigns it.
-      if (path.extname(file) === '.html' && req.method === 'GET' && removed.size) {
-        const hide = `<script>(()=>{const r=new Set(${JSON.stringify([...removed])});let d;Object.defineProperty(window,'TWEET_DATA',{configurable:true,get:()=>d,set:v=>{d=Array.isArray(v)?v.filter(t=>!r.has(String(t.tweetId))):v;}});})();</script>`;
-        return reply(200, (await readFile(file, 'utf8')).replace('</head>', hide + '</head>'), mime['.html']);
-      }
-      if (relative === 'tweets.json' && req.method === 'GET' && removed.size) {
-        const tweets = JSON.parse(await readFile(file, 'utf8')).filter(t => !removed.has(String(t.tweetId)));
-        return reply(200, tweets);
-      }
+      if (relative === 'tweets.json') return sendEntry(req, res, await tweetsEntry(file, info), mime['.json'], 'private, no-cache');
       let start = 0, end = info.size - 1, code = 200;
       if (req.headers.range) {
         const match = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range);

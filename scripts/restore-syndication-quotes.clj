@@ -1,6 +1,6 @@
 (require '[twitter-scraper.core :as core]
          '[twitter-scraper.fetcher :as fetcher]
-         '[twitter-scraper.html :as html])
+         '[twitter-scraper.output :as output])
 (let [[output] *command-line-args*
       tweets (core/load-cache output)
       restored (atom 0)
@@ -11,7 +11,6 @@
                               (assoc tweet :quote (fetcher/download-media quote (str output "/media"))))
                           tweet))) tweets)]
   (core/save-cache updated output)
-  (html/copy-css output)
-  (html/generate-all-pages updated output {})
+  (output/write-archive updated output)
   (println "Recovered quotes from archived Twitter responses:" @restored))
 (shutdown-agents)

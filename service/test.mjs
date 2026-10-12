@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
+import { request } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { createApp, equal } from './server.mjs';
@@ -9,7 +10,7 @@ import { selectNew, Worker } from './worker.mjs';
 test('private archive gates all assets, enforces origin and blocks hidden files and symlinks', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'archive-test-'));
   await mkdir(path.join(root, 'archive'));
-  await writeFile(path.join(root, 'archive/index.html'), 'private archive');
+  await writeFile(path.join(root, 'archive/tweets.json'), '[{"tweetId":"1"}]');
   await writeFile(path.join(root, 'archive/video.mp4'), '0123456789');
   await writeFile(path.join(root, 'archive/.tweet-cache.edn'), 'secret');
   await writeFile(path.join(root, 'outside.html'), 'secret');
@@ -21,7 +22,7 @@ test('private archive gates all assets, enforces origin and blocks hidden files 
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true }); });
   const url = `http://127.0.0.1:${server.address().port}`;
-  for (const asset of ['/archive/', '/archive/video.mp4', '/archive/.tweet-cache.edn', '/api/status']) {
+  for (const asset of ['/archive/tweets.json', '/archive/video.mp4', '/archive/.tweet-cache.edn', '/api/status']) {
     assert.equal((await fetch(url + asset, { redirect: 'manual' })).status, asset.startsWith('/archive/') ? 302 : 401);
   }
   assert.equal((await fetch(url + '/session', { method: 'POST', body: JSON.stringify({ token: config.token }) })).status, 403);
@@ -30,8 +31,8 @@ test('private archive gates all assets, enforces origin and blocks hidden files 
   assert.equal(login.status, 200);
   assert.match(login.headers.get('set-cookie'), /HttpOnly; SameSite=Strict;.*Secure/);
   const headers = { Cookie: login.headers.get('set-cookie').split(';')[0] };
-  assert.equal(await (await fetch(url + '/archive/', { headers })).text(), 'private archive');
-  for (const asset of ['/archive/.tweet-cache.edn', '/archive/link.html', '/archive/%2e%2e%2foutside.html']) assert.equal((await fetch(url + asset, { headers })).status, 404);
+  assert.deepEqual(await (await fetch(url + '/archive/tweets.json', { headers })).json(), [{ tweetId: '1' }]);
+  for (const asset of ['/archive/', '/archive/.tweet-cache.edn', '/archive/link.html', '/archive/%2e%2e%2foutside.html']) assert.equal((await fetch(url + asset, { headers })).status, 404);
   const video = await fetch(url + '/archive/video.mp4', { headers: { ...headers, Range: 'bytes=2-5' } });
   assert.equal(video.status, 206); assert.equal(await video.text(), '2345');
   assert.equal((await fetch(url + '/api/update', { method: 'POST', headers })).status, 403);
@@ -79,11 +80,10 @@ test('failed normal Chrome launch leaves automatic checks paused', async () => {
 
 test('removing a tweet hides it at once, keeps it out of updates, and starts a purge', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'archive-remove-'));
-  await mkdir(path.join(root, 'archive/tweets'), { recursive: true });
+  await mkdir(path.join(root, 'archive/articles'), { recursive: true });
   await mkdir(path.join(root, 'archive/media'));
-  await writeFile(path.join(root, 'archive/index.html'), '<html><head></head><body><script>window.TWEET_DATA = [];</script></body></html>');
   await writeFile(path.join(root, 'archive/tweets.json'), JSON.stringify([{ tweetId: '10' }, { tweetId: '20' }]));
-  for (const file of ['tweets/10.html', 'tweets/20.html', 'media/10_0.jpg']) await writeFile(path.join(root, 'archive', file), 'x');
+  for (const file of ['articles/10.json', 'articles/20.json', 'media/10_0.jpg']) await writeFile(path.join(root, 'archive', file), '{}');
   let purges = 0;
   const origin = 'https://archive.example', stateDir = path.join(root, '.service');
   const worker = { busy: false, update: async () => {}, purge: async () => { purges++; } };
@@ -100,10 +100,53 @@ test('removing a tweet hides it at once, keeps it out of updates, and starts a p
   assert.equal(purges, 1); assert.equal(state.removalPending, true);
   assert.deepEqual(JSON.parse(await readFile(path.join(stateDir, 'removed.json'), 'utf8')), ['10']);
   assert.deepEqual(await (await fetch(url + '/archive/tweets.json', { headers })).json(), [{ tweetId: '20' }]);
-  for (const file of ['tweets/10.html', 'media/10_0.jpg']) assert.equal((await fetch(url + '/archive/' + file, { headers })).status, 404);
-  assert.equal((await fetch(url + '/archive/tweets/20.html', { headers })).status, 200);
-  const index = await (await fetch(url + '/archive/', { headers })).text();
-  assert.match(index, /new Set\(\["10"\]\).*<\/head>/); assert.doesNotMatch(index, /<script src=/);
+  for (const file of ['articles/10.json', 'media/10_0.jpg']) assert.equal((await fetch(url + '/archive/' + file, { headers })).status, 404);
+  assert.equal((await fetch(url + '/archive/articles/20.json', { headers })).status, 200);
+});
+
+test('archive data is compressed and revalidated, and refreshes after changes', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'archive-cache-'));
+  await mkdir(path.join(root, 'archive'));
+  const tweets = Array.from({ length: 200 }, (_, i) => ({ tweetId: String(100 + i), text: 'A liked tweet about compression and caching ' + i }));
+  const file = path.join(root, 'archive/tweets.json');
+  await writeFile(file, JSON.stringify(tweets));
+  const origin = 'https://archive.example';
+  const { server, config } = await createApp({ root, stateDir: path.join(root, '.service'), publicOrigin: origin, schedule: false,
+    workerFactory: () => ({ busy: false, purge: async () => {} }) });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true }); });
+  const port = server.address().port, cookie = '__Host-archive=' + config.token;
+  // Raw requests, so the test sees the compressed bytes and status codes the browser gets.
+  const get = (pathname, extra = {}) => new Promise((resolve, reject) => {
+    request({ port, path: pathname, headers: { Host: '127.0.0.1:' + port, Cookie: cookie, ...extra } }, res => {
+      const chunks = []; res.on('data', c => chunks.push(c)); res.on('end', () => resolve({ res, body: Buffer.concat(chunks) }));
+    }).on('error', reject).end();
+  });
+  const first = await get('/archive/tweets.json', { 'Accept-Encoding': 'gzip' });
+  assert.equal(first.res.statusCode, 200);
+  assert.equal(first.res.headers['content-encoding'], 'gzip');
+  assert.equal(first.res.headers['cache-control'], 'private, no-cache');
+  assert.ok(first.body.length * 3 < Buffer.byteLength(JSON.stringify(tweets)), 'compressed to under a third');
+  const { gunzipSync } = await import('node:zlib');
+  assert.deepEqual(JSON.parse(gunzipSync(first.body)), tweets);
+  const etag = first.res.headers.etag;
+  const unchanged = await get('/archive/tweets.json', { 'If-None-Match': etag });
+  assert.equal(unchanged.res.statusCode, 304); assert.equal(unchanged.body.length, 0);
+  const plain = await get('/archive/tweets.json');
+  assert.equal(plain.res.headers['content-encoding'], undefined); assert.equal(JSON.parse(plain.body).length, 200);
+  // A removal changes the data and its ETag at once.
+  const login = { Cookie: cookie, Origin: origin };
+  assert.equal((await fetch(`http://127.0.0.1:${port}/api/remove`, { method: 'POST', headers: login, body: JSON.stringify({ id: '100' }) })).status, 202);
+  const afterRemoval = await get('/archive/tweets.json', { 'If-None-Match': etag });
+  assert.equal(afterRemoval.res.statusCode, 200); assert.notEqual(afterRemoval.res.headers.etag, etag);
+  assert.equal(JSON.parse(afterRemoval.body).length, 199);
+  // So does a new import.
+  await writeFile(file, JSON.stringify(tweets.slice(0, 50)));
+  const afterImport = await get('/archive/tweets.json', { 'If-None-Match': afterRemoval.res.headers.etag });
+  assert.equal(afterImport.res.statusCode, 200); assert.equal(JSON.parse(afterImport.body).length, 49);
+  // Links to the retired article pages open the article in the app.
+  const article = await get('/archive/articles/123.html');
+  assert.equal(article.res.statusCode, 302); assert.equal(article.res.headers.location, '/app/article/123');
 });
 
 test('purge publishes only a staged archive without the removed tweets', async t => {

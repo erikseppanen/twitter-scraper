@@ -27,7 +27,16 @@ tweets[2].text = 'Je voudrais présenter mes nouvelles idées pour améliorer no
 await mkdir(path.join(root, 'archive/media'), { recursive: true });
 await writeFile(path.join(root, 'archive/tweets.json'), JSON.stringify(tweets));
 await writeFile(path.join(root, 'archive/media/photo.png'), png);
-await writeFile(path.join(root, 'archive/index.html'), '<html><head></head><body>Generated archive</body></html>');
+await mkdir(path.join(root, 'archive/articles'));
+await writeFile(path.join(root, 'archive/articles/1000-cover.jpg'), png);
+await writeFile(path.join(root, 'archive/articles/1000-5.png'), png);
+await writeFile(path.join(root, 'archive/articles/1000.json'), JSON.stringify({ tweetId: '1000', title: 'An article title', createdAt: '2026-05-01T12:00:00Z',
+  user: { name: 'Author 0', screenName: 'author0' }, cover: '1000-cover.jpg', blocks: [
+    { type: 'h1', text: 'First section' },
+    { type: 'p', text: 'Bold start & a link', styles: [{ offset: 0, length: 4, style: 'bold' }], links: [{ offset: 15, length: 4, url: 'https://example.com/a' }] },
+    { type: 'ul', text: 'One' }, { type: 'ul', text: 'Two' },
+    { type: 'image', src: '1000-5.png', caption: 'A chart' },
+    { type: 'code', code: 'ls -la' }, { type: 'tweet', tweetId: '1001' }] }));
 const port = 14328, origin = 'http://127.0.0.1:' + port;
 // Neighbors are the next two tweets; the translator is a slow stand-in for the local model.
 const searches = [];
@@ -80,7 +89,30 @@ try {
   assert.equal(await first.locator('.quote-card .quote-text').textContent(), 'Quoted words');
   // X's escaped characters show as themselves.
   assert.match(await page.locator('#tweet-1004 .tweet-text').textContent(), /bread & 1 < 2 > 0$/);
-  assert.equal(await first.locator('.article-card').getAttribute('href'), '/archive/articles/1000.html');
+  // Articles open in the app, with their formatting and downloaded images.
+  await first.locator('.article-card').click();
+  await page.waitForURL(origin + '/app/article/1000');
+  const article = page.locator('article.article');
+  await article.locator('h1', { hasText: 'An article title' }).waitFor();
+  assert.equal(await article.locator('h2').textContent(), 'First section');
+  assert.equal(await article.locator('strong').first().textContent(), 'Bold');
+  assert.equal(await article.locator('a[href="https://example.com/a"]').textContent(), 'link');
+  assert.match(await article.locator('p').nth(1).textContent(), /^Bold start & a link$/);
+  assert.equal(await article.locator('ul li').count(), 2);
+  assert.equal(await article.locator('pre code').textContent(), 'ls -la');
+  await page.waitForFunction(() => [...document.querySelectorAll('article.article img')].length === 2 &&
+    [...document.querySelectorAll('article.article img')].every(img => img.complete && img.naturalWidth > 0));
+  assert.equal(await article.locator('figcaption').textContent(), 'A chart');
+  await article.getByRole('link', { name: 'View the embedded post' }).click();
+  await page.waitForURL(origin + '/app/tweet/1001');
+  await page.goBack();
+  await page.goBack();
+  await page.locator('.timeline #tweet-1000').waitFor();
+  await page.locator('.tweet').nth(49).scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.querySelectorAll('.tweet').length === 100);
+  // Links to the old article pages still arrive there.
+  const oldLink = await page.request.get(origin + '/archive/articles/1000.html', { maxRedirects: 0 });
+  assert.equal(oldLink.headers().location, '/app/article/1000');
   // Translation shows progress, then the English text with a toggle back to the original.
   const french = page.locator('#tweet-1002');
   await french.scrollIntoViewIfNeeded();
@@ -138,8 +170,8 @@ try {
   assert.equal(await page.locator('.timeline #tweet-1000 a.action', { hasText: 'Permalink' }).getAttribute('href'), '/tweet/1000');
   await page.goBack();
   await page.locator('.timeline #tweet-1000').waitFor();
-  const fallback = await (await page.request.get(origin + '/archive/')).text();
-  assert.match(fallback, /Generated archive/); assert.doesNotMatch(fallback, /<script src=/);
+  // The archive data arrives compressed.
+  assert.equal((await page.request.get(origin + '/archive/tweets.json')).headers()['content-encoding'], 'gzip');
   await page.reload();
   await page.locator('.status', { hasText: 'from 119 tweets' }).waitFor();
   // An author's name opens Likes filtered to them, from any tweet, and Back returns.
@@ -291,7 +323,7 @@ try {
   await page.locator('.graph .node').first().waitFor();
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   assert.deepEqual(errors, []);
-  console.log('PASS: React app timeline, shuffle, Random, related, translation, removal, tweet pages, Explore, Updates and phone layout.');
+  console.log('PASS: React app timeline, articles, shuffle, Random, related, translation, removal, tweet pages, Explore, Updates and phone layout.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

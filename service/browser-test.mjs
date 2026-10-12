@@ -7,7 +7,6 @@ import os from 'node:os';
 import assert from 'node:assert/strict';
 const root = await mkdtemp(path.join(os.tmpdir(), 'archive-ui-'));
 await mkdir(path.join(root, 'archive'));
-await writeFile(path.join(root, 'archive/index.html'), '<h1>Test archive</h1>');
 const { server, config } = await createApp({ root, stateDir: path.join(root, '.service'), publicOrigin: 'http://127.0.0.1:14318', schedule: false, workerFactory: state => ({ busy: false, update: async () => { state.message = 'Test update completed'; } }) });
 await new Promise(resolve => server.listen(14318, '127.0.0.1', resolve));
 let browser;
@@ -20,8 +19,6 @@ try {
   await page.getByRole('link', { name: 'Updates' }).click();
   await page.getByRole('button', { name: 'Update now', exact: true }).click();
   await page.getByText('Test update completed', { exact: true }).waitFor();
-  await page.goto('http://127.0.0.1:14318/archive/');
-  await page.getByRole('heading', { name: 'Test archive' }).waitFor();
   await writeFile(path.join(root, 'archive/tweets.json'), JSON.stringify([{tweetId:'12'},{tweetId:'11'},{tweetId:'10'}]));
   const state = { baseline: '10' };
   const worker = new Worker(root, path.join(root, '.service'), async () => {}, state);
@@ -41,7 +38,7 @@ try {
   assert.ok(state.lastSuccess);
   assert.equal(state.message, 'Up to date. Imported 0 new likes.');
   console.log('PASS: browser collection uses timestamp links, ignores quoted links, and stops at the saved like-order cutoff');
-  console.log('PASS: private-link exchange, fragment removal, update button, archive navigation in Chrome');
+  console.log('PASS: private-link exchange, fragment removal, update button in Chrome');
 } finally {
   if (browser) await browser.close();
   await new Promise(resolve => server.close(resolve));

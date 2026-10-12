@@ -35,6 +35,7 @@ export function parseRoute(pathname = location.pathname) {
   if ((match = /^\/app\/explore(?:\/tweet\/(\d+))?\/?$/.exec(pathname))) return { page: 'explore', id: match[1] || null };
   if (/^\/app\/updates\/?$/.test(pathname)) return { page: 'updates' };
   if (/^\/app\/random\/?$/.test(pathname)) return { page: 'random' };
+  if ((match = /^\/app\/article\/(\d+)\/?$/.exec(pathname))) return { page: 'article', id: match[1] };
   return { page: 'timeline' };
 }
 

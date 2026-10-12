@@ -5,7 +5,7 @@
             [clojure.edn :as edn]
             [twitter-scraper.parser :as parser]
             [twitter-scraper.fetcher :as fetcher]
-            [twitter-scraper.html :as html]
+            [twitter-scraper.output :as output]
             [twitter-scraper.util :as util])
   (:gen-class))
 
@@ -26,12 +26,13 @@
    ["-R" "--retweets-only" "Archive only retweets, not likes"]
    ["-F" "--refetch-failed" "Re-fetch tweets that previously failed (empty text/user)"]
    ["-X" "--remove FILE" "Remove tweet IDs listed in FILE from the archive; later imports skip them"]
+   ["-B" "--rebuild" "Rewrite tweets.json and article files from the cache"]
    ["-h" "--help" "Show this help"]])
 
 (defn usage [options-summary]
   (->> ["Twitter Likes Archiver"
         ""
-        "Downloads media and generates static HTML pages from your Twitter likes."
+        "Downloads your Twitter likes, their media and articles for the archive app."
         ""
         "Usage: clj -M -m twitter-scraper.core [options]"
         ""
@@ -42,7 +43,7 @@
         "  1. Download your Twitter archive from Twitter Settings"
         "  2. Extract the archive"
         "  3. Run this tool with --input pointing to the extracted directory"
-        "  4. Open the generated index.html in your browser"
+        "  4. Serve the output with the archive service and open its app"
         ""]
        (str/join \newline)))
 
@@ -68,6 +69,9 @@
       {:options options}
 
       (:remove options)
+      {:options options}
+
+      (:rebuild options)
       {:options options}
 
       (nil? (:input options))
@@ -213,17 +217,12 @@
 
         (util/log-info "")
 
-        ;; Step 4: Generate HTML
-        (util/log-info "=== Step 4: Generating HTML Pages ===")
-        (html/copy-css output)
-        (html/generate-all-pages
-         tweets-with-media
-         output
-         {:on-progress #(print-progress "HTML" %1 %2 %3)})
+        ;; Step 4: Write the files the app reads
+        (util/log-info "=== Step 4: Writing Archive Data ===")
+        (output/write-archive tweets-with-media output)
 
         (util/log-info "")
-        (util/log-info "=== Archive Complete ===")
-        (util/log-info "Open" (str output "/index.html") "in your browser")))))
+        (util/log-info "=== Archive Complete ===")))))
 
 (defn run-import
   "Import tweets from a file of IDs and merge with existing archive."
@@ -291,19 +290,13 @@
               ;; Persist downloaded paths so later imports keep serving local media.
               (save-cache tweets-with-media output)
 
-              ;; Regenerate HTML for all tweets
               (util/log-info "")
-              (util/log-info "=== Regenerating HTML Pages ===")
-              (html/copy-css output)
-              (html/generate-all-pages
-               tweets-with-media
-               output
-               {:on-progress #(print-progress "HTML" %1 %2 %3)})
+              (util/log-info "=== Writing Archive Data ===")
+              (output/write-archive tweets-with-media output)
 
               (util/log-info "")
               (util/log-info "=== Import Complete ===")
-              (util/log-info "Total tweets in archive:" (count tweets-with-media))
-              (util/log-info "Open" (str output "/index.html") "in your browser"))))))))
+              (util/log-info "Total tweets in archive:" (count tweets-with-media)))))))))
 
 (defn is-empty-tweet?
   "Check if a tweet has no content (failed to fetch)."
@@ -376,25 +369,19 @@
                                 (get recovered-map (:tweet-id tweet) tweet))
                               updated-tweets))))]
 
-              ;; Regenerate HTML
               (util/log-info "")
-              (util/log-info "=== Regenerating HTML Pages ===")
-              (html/copy-css output)
-              (html/generate-all-pages
-               tweets-with-media
-               output
-               {:on-progress #(print-progress "HTML" %1 %2 %3)})
+              (util/log-info "=== Writing Archive Data ===")
+              (output/write-archive tweets-with-media output)
 
               (util/log-info "")
-              (util/log-info "=== Re-fetch Complete ===")
-              (util/log-info "Open" (str output "/index.html") "in your browser"))))))))
+              (util/log-info "=== Re-fetch Complete ==="))))))))
 
 ;; Media filenames are shared when two tweets quote the same tweet.
 (defn- local-media-paths [tweet]
   (keep :local-path (concat (:media tweet) (get-in tweet [:quote :media]))))
 
 (defn run-remove
-  "Remove tweets from the cache, generated pages, and media no other tweet uses."
+  "Remove tweets from the cache, their article files, and media no other tweet uses."
   [{:keys [output] remove-file :remove}]
   (let [ids (set (parse-tweet-ids-file remove-file))
         tweets (or (load-cache output) [])
@@ -414,17 +401,23 @@
       (doseq [tweet gone
               id (distinct [(:tweet-id tweet) (get-in tweet [:quote :tweet-id])])
               :when (and id (not (kept-ids id)))]
-        (delete! (str "tweets/" id ".html"))
-        (delete! (str "articles/" id ".html"))
+        (delete! (str "articles/" id ".json"))
         (doseq [file (.listFiles (io/file output "articles"))
                 :when (str/starts-with? (.getName file) (str id "-"))]
           (delete! (str "articles/" (.getName file)))))
       (doseq [relative (distinct (mapcat local-media-paths gone))
               :when (not (kept-media relative))]
         (delete! (str "media/" relative)))
-      (html/copy-css output)
-      (html/generate-all-pages kept output {}))
+      (output/write-archive kept output))
     (util/log-info "Archive now has" (count kept) "tweets")))
+
+(defn run-rebuild
+  "Rewrite the app's files from the cache, without fetching anything."
+  [{:keys [output]}]
+  (let [tweets (load-cache output)]
+    (when-not tweets
+      (throw (ex-info (str "No cache found in " output) {})))
+    (output/write-archive tweets output)))
 
 (defn -main [& args]
   (let [{:keys [options exit-message ok?]} (validate-args args)]
@@ -436,6 +429,7 @@
         (cond
           (:refetch-failed options) (run-refetch-failed options)
           (:remove options) (run-remove options)
+          (:rebuild options) (run-rebuild options)
           (:import options) (run-import options)
           :else (run-archive options))
         (catch Exception e

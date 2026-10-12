@@ -24,17 +24,15 @@ try {
   return {status:r.status,count:tweets.length,mediaStatus:m.status,bytes:(await m.arrayBuffer()).byteLength,hiddenStatus:hidden.status};
  });
  assert.equal(data.status,200);assert.ok(data.count>0);assert.equal(data.mediaStatus,206);assert.equal(data.bytes,32);assert.equal(data.hiddenStatus,404);
- await page.goto(origin+'/archive/');
- assert.match(page.url(),/\/archive\/$/);
- const sample=await page.evaluate(()=>window.TWEET_DATA.find(t=>t.quote?.media?.some(m=>m.type==='photo' && m.localPath)));
+ const sample=await page.evaluate(async()=>(await (await fetch('/archive/tweets.json')).json()).find(t=>t.quote?.media?.some(m=>m.type==='photo' && m.localPath)));
  assert.ok(sample, 'A quoted photo is needed for this deployment check');
  // Test an existing archived quote without recording private IDs or content in source/logs.
  const expected=sample.quote.media.filter(m=>m.type==='photo').length;
- await page.goto(origin+'/archive/tweets/'+encodeURIComponent(sample.tweetId)+'.html');
+ await page.goto(origin+'/app/tweet/'+encodeURIComponent(sample.tweetId));
  await page.locator('.quote-card').scrollIntoViewIfNeeded();
  await page.waitForFunction(count=>{
   const images=[...document.querySelectorAll('.quote-card .media-grid img')];
   return images.length===count && images.every(i=>i.complete&&i.naturalWidth>0);
  },expected);
- console.log('PASS: protected live archive and quoted photos on an individual page.');
+ console.log('PASS: protected live archive and quoted photos on a tweet's page.');
 }finally{await browser.close();}

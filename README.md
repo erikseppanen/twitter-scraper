@@ -2,7 +2,8 @@
 
 A private Twitter/X likes archive running on a Mac Mini. A Node service schedules updates,
 uses a dedicated Chrome session to collect new likes, and calls a Clojure importer to fetch
-content, download media, and generate searchable HTML. No LLM or browser extension is required.
+content and download media, and serves a private web app for browsing them. No LLM or
+browser extension is required.
 
 ## Everyday use
 
@@ -24,15 +25,15 @@ Chrome window on the Mini, then choose **Finish sign-in**. Automatic checks paus
 sign-in. Your ordinary Chrome windows can stay open. After a reboot, log into the Mini's
 macOS account so the service can start.
 
-The Clojure-generated pages remain at `/archive/` as a plain fallback that also opens
-from disk without the server. See the [everyday guide](TUTORIAL.md) for browsing,
-backups, and recovery.
+X articles open in the app at `/app/article/ID`, with their formatting and downloaded
+images. See the [everyday guide](TUTORIAL.md) for browsing, backups, and recovery.
 
 ## Archive app
 
 The app in `web/` is React and plain JavaScript built with Vite, styled after X, and
-served at `/app/` behind the private-link login. It loads `archive/tweets.json` and uses the
-service APIs for related tweets, translation, removal and updates.
+served at `/app/` behind the private-link login. It loads `archive/tweets.json`, which the
+server sends compressed and the browser keeps until it changes, and uses the service APIs
+for related tweets, translation, removal and updates.
 
 ```bash
 npm ci --prefix web
@@ -89,7 +90,7 @@ flowchart TD
     Likes --> Importer[Clojure importer]
     Export[Optional historical Twitter export or ID file] --> Importer
     Importer --> Fetch[Fetch content from syndication and FXTwitter APIs]
-    Fetch --> Stage[Download media and generate HTML in archive-staging]
+    Fetch --> Stage[Download media and write app data in archive-staging]
     Stage --> Validate[Validate newly collected tweets have content]
     Validate --> Archive[Publish archive; retain archive-previous]
     Browser[Viewer with private bookmark] --> Funnel[Tailscale Funnel HTTPS :8443]
@@ -106,7 +107,7 @@ flowchart TD
   happens in a normal visible Chrome window. The worker uses tweet timestamp links to
   collect parent IDs and tracks the order of likes, rather than comparing tweet creation IDs.
 - **Clojure pipeline:** imports only new IDs, fetches text, articles, and quoted content,
-  downloads media, persists metadata, and generates the index, JSON, and individual pages.
+  downloads media, persists metadata, and writes `tweets.json` and one JSON file per article.
   Twitter's syndication response also provides a fallback for quoted media when the
   supplemental API cannot return it. These content APIs do not require an API key;
   collecting the user's Likes page requires the saved X login.
@@ -116,7 +117,6 @@ flowchart TD
   interruption between those renames. Media download failures are not part of this content
   validation; unavailable media may retain a remote URL.
 - **Storage:** plain files and an EDN metadata cache; there is no database or cloud scraper.
-  The generated archive can also be opened locally without the Node server.
 
 The first collection looks for overlap with the existing archive. Later runs seek the
 saved like-order cutoff. This is incremental collection, not a guaranteed complete
@@ -167,8 +167,9 @@ web/                      React + Vite archive app served at /app/
   src/tweets.js           Filtering, sorting, shuffling, links and highlighting
   src/components/         Tweet, related panel, dialog, media, quote and header components
   src/translation.js      Shared, retrying translation requests
-  src/router.js           History routing for /app/, /app/tweet/ID, /app/explore, /app/updates
-  src/pages/              Timeline, tweet, Explore, Random and Updates pages
+  src/article.js          Article text styling and list grouping
+  src/router.js           History routing for /app/, /app/tweet/ID, /app/article/ID and the other pages
+  src/pages/              Timeline, tweet, article, Explore, Random and Updates pages
 service/
   server.mjs              HTTP authentication, protected files, APIs, scheduler
   worker.mjs              Chrome lifecycle, Likes collection, staged imports
@@ -182,12 +183,11 @@ src/twitter_scraper/
   core.clj                CLI and import/archive/recovery pipelines
   parser.clj              Twitter export and retweet parsing
   fetcher.clj             Content APIs, quoted content, media downloads
-  html.clj                Index, JSON, tweet and article page generation
+  output.clj              tweets.json and article files for the app
   util.clj                Shared utilities
-resources/templates/style.css
 test/twitter_scraper/core_test.clj
 
-archive/                  Published HTML, tweets.json, media/, articles/, tweets/
+archive/                  Published tweets.json, media/, articles/
   .tweet-cache.edn         Cached metadata, text, and media references
   .removed-ids             Tweets removed by the user; imports skip them
 archive-staging/          Temporary working copy for a normal update
@@ -224,8 +224,8 @@ clj -M -m twitter-scraper.core --remove /path/to/tweet-ids.txt --output ./archiv
 # Retry cached entries missing tweet content
 clj -M -m twitter-scraper.core --refetch-failed --output ./archive-repair
 
-# Regenerate pages from an existing cache without network access
-clj -M -m twitter-scraper.core --input ~/twitter-archive --output ./archive-repair --skip-fetch --skip-media
+# Rewrite tweets.json and article files from the cache, without network access
+clj -M -m twitter-scraper.core --rebuild --output ./archive-repair
 
 # Full CLI reference
 clj -M -m twitter-scraper.core --help
@@ -240,8 +240,9 @@ new imports include quoted media automatically.
 ## Backups
 
 Back up the **entire `archive/` directory**, including the hidden `.tweet-cache.edn`,
-`media/`, and `articles/`. The cache stores metadata, not image or video bytes. HTML and
-JSON can be regenerated, but deleted source media may never be downloadable again.
+`media/`, and `articles/`. The cache stores metadata, not image or video bytes. The JSON
+files can be regenerated with `--rebuild`, but deleted source media may never be
+downloadable again.
 `archive-previous` is a rollback copy, not an independent backup.
 
 Back up service configuration and `.service/` state securely if you need to recover the
@@ -254,12 +255,13 @@ out of Git and public assets. Restoring a Chrome profile may still require a new
 clojure -M:test
 npm ci --prefix service
 npm test --prefix service
-npm --prefix service run test:quotes
+npm test --prefix web
+npm --prefix service run test:web
 npm --prefix service run test:knowledge
 ```
 
-These cover import/cache behavior, quote extraction and rendering, server access controls,
-and quoted-image display in Chrome. See [service test documentation](service/README.md#tests)
+These cover import/cache behavior, article conversion, quote extraction, server access
+controls and caching, and the app in Chrome. See [service test documentation](service/README.md#tests)
 for collection fixtures, login persistence, and checks against a running deployment.
 
 ## License

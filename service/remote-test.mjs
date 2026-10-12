@@ -24,7 +24,5 @@ try {
   return {status:r.status,count:tweets.length,mediaStatus:m.status,bytes:(await m.arrayBuffer()).byteLength,hiddenStatus:hidden.status};
  });
  assert.equal(data.status,200);assert.ok(data.count>0);assert.equal(data.mediaStatus,206);assert.equal(data.bytes,32);assert.equal(data.hiddenStatus,404);
- await page.goto(origin+'/archive/');
- assert.match(page.url(),/\/archive\/$/);
- console.log('PASS: public HTTPS, private bookmark, fragment removal, archive navigation, protected data and media.',data);
+ console.log('PASS: public HTTPS, private bookmark, fragment removal, protected data and media.',data);
 }finally{await browser.close();}
