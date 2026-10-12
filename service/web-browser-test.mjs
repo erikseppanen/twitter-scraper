@@ -142,6 +142,17 @@ try {
   assert.match(fallback, /Generated archive/); assert.doesNotMatch(fallback, /<script src=/);
   await page.reload();
   await page.locator('.status', { hasText: 'from 119 tweets' }).waitFor();
+  // An author's name opens Likes filtered to them, from any tweet, and Back returns.
+  await page.goto(origin + '/app/tweet/1005');
+  await page.locator('.related-sidebar #tweet-1006 .display-name').click();
+  await page.waitForURL(origin + '/app/?author=author0');
+  await page.locator('.status', { hasText: 'of 39 (by @author0) from 119 tweets' }).waitFor();
+  await page.goBack();
+  await page.waitForURL(origin + '/app/tweet/1005');
+  await page.locator('.timeline #tweet-1005 .handle').click();
+  await page.locator('.status', { hasText: 'of 40 (by @author2) from 119 tweets' }).waitFor();
+  await page.goto(origin + '/app/');
+  await page.locator('.status', { hasText: 'from 119 tweets' }).waitFor();
   // Author, year/month and sort controls; the URL keeps the view.
   await page.locator('.tweet .handle', { hasText: '@author1' }).first().click();
   await page.locator('.status', { hasText: 'of 40 (by @author1)' }).waitFor();

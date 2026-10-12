@@ -140,10 +140,10 @@ a.pill { display: inline-flex; align-items: center; color: var(--text); text-dec
 .avatar-placeholder { display: block; background: var(--bg-input); }
 .tweet-body { flex: 1; min-width: 0; container-type: inline-size; }
 .tweet-header { display: flex; align-items: baseline; gap: 4px; min-width: 0; white-space: nowrap; }
-.display-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.display-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--text); }
 .secondary { color: var(--text-secondary); }
-.handle { border: 0; background: none; padding: 0; cursor: pointer; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.handle:hover, .date:hover { text-decoration: underline; }
+.handle { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.display-name:hover, .handle:hover, .date:hover { text-decoration: underline; }
 .date { flex-shrink: 0; }
 .x-link { margin-left: auto; padding-left: 8px; color: var(--text-secondary); }
 .x-link:hover { color: var(--accent); text-decoration: none; }

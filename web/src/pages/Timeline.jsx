@@ -67,7 +67,6 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
   // Shuffling, or shuffling again, picks a new seed; the seed in the address keeps the order on return.
   const setSort = next => { setView(current => ({ ...current, sort: next, seed: next === 'random' ? newSeed() : null })); scrollTo({ top: 0 }); };
   const oneAtATime = '/app/random?' + writeFilters(new URLSearchParams({ seed }), filters);
-  const showAuthor = author => { setFilter('author', author); scrollTo({ top: 0 }); };
   const openRelated = id => {
     setView(current => ({ ...current, related: id }));
     setTrail(current => current.at(-1) === id ? current : [...current, id]);
@@ -94,7 +93,7 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
           sort={sort} setSort={setSort} oneAtATime={oneAtATime} />
         {visible.slice(0, shown).map(tweet => (
           <Tweet key={tweet.tweetId} tweet={tweet} query={deferredFilters.query} active={tweet.tweetId === related}
-            onAuthor={showAuthor} onRelated={startRelated} onRemove={onRemove} />
+            onRelated={startRelated} onRemove={onRemove} />
         ))}
         {tweets && !visible.length && <p className="empty">No likes match these filters.</p>}
         <div ref={sentinel} />

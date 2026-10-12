@@ -8,10 +8,13 @@ import { RelatedIcon, LinkIcon, TrashIcon, ExternalIcon } from './Icons.jsx';
 import { formatDate } from '../tweets.js';
 import { inApp } from '../router.js';
 
-export default function Tweet({ tweet, query, onAuthor, onRelated, onRemove, active = false, full = false, children }) {
+export default function Tweet({ tweet, query, onRelated, onRemove, active = false, full = false, children }) {
   const user = tweet.user || {};
   const date = formatDate(tweet.createdAt);
   const page = '/app/tweet/' + tweet.tweetId;
+  // The name and handle open Likes filtered to this author.
+  const author = user.screenName && '/app/?author=' + encodeURIComponent(user.screenName);
+  const authorTitle = author && 'Show your likes from @' + user.screenName;
   return (
     <article className={'tweet' + (active ? ' active' : '') + (full ? ' full' : '')} id={'tweet-' + tweet.tweetId}>
       <div className="tweet-avatar">
@@ -19,10 +22,10 @@ export default function Tweet({ tweet, query, onAuthor, onRelated, onRemove, act
       </div>
       <div className="tweet-body">
         <header className="tweet-header">
-          <span className="display-name"><Highlighted text={user.name || user.screenName || 'Unknown'} query={query} /></span>
-          {user.screenName && (onAuthor
-            ? <button type="button" className="secondary handle" title={'Show likes from @' + user.screenName} onClick={() => onAuthor(user.screenName)}>@<Highlighted text={user.screenName} query={query} /></button>
-            : <span className="secondary handle">@{user.screenName}</span>)}
+          {author
+            ? <a className="display-name" href={author} onClick={inApp(author)} title={authorTitle}><Highlighted text={user.name || user.screenName} query={query} /></a>
+            : <span className="display-name">{user.name || 'Unknown'}</span>}
+          {author && <a className="secondary handle" href={author} onClick={inApp(author)} title={authorTitle}>@<Highlighted text={user.screenName} query={query} /></a>}
           {date && <><span className="secondary">·</span><a className="secondary date" href={page} onClick={inApp(page)} title="Open this tweet">{date}</a></>}
         </header>
         {tweet.text && <TweetText className="tweet-text" tweetId={tweet.tweetId} text={tweet.text} query={query} clampLong={!full} />}
