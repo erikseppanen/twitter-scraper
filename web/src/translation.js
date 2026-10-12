@@ -1,3 +1,5 @@
+import { parseJSON } from './api.js';
+
 // One request per text, shared by every place the tweet appears. The server translates
 // ahead of time, so most answers are immediate; transient failures retry with backoff.
 const cache = new Map();
@@ -8,7 +10,7 @@ async function request(id, quoted) {
   for (let attempt = 0; ; attempt++) {
     try {
       const response = await fetch('/api/translation?' + new URLSearchParams({ id, quote: quoted ? '1' : '0' }));
-      if (response.ok) return await response.json();
+      if (response.ok) return parseJSON(await response.text());
       if (response.status < 500) throw Object.assign(Error('Translation unavailable.'), { final: true });
       if (attempt >= DELAYS.length) throw Error('Translation unavailable.');
     } catch (error) {

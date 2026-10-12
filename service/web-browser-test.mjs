@@ -22,6 +22,7 @@ Object.assign(tweets[0], {
   quote: { tweetId: '9', text: 'Quoted words', user: { name: 'Quoted', screenName: 'quoted' }, media: [{ type: 'photo', localPath: 'photo.png' }] },
   article: { title: 'An article title', previewText: 'Preview of the article' },
 });
+tweets[4].text += ' &amp; 1 &lt; 2 &gt; 0';
 tweets[2].text = 'Je voudrais présenter mes nouvelles idées pour améliorer notre bibliothèque. Nous avons beaucoup de livres intéressants à partager avec tout le monde.';
 await mkdir(path.join(root, 'archive/media'), { recursive: true });
 await writeFile(path.join(root, 'archive/tweets.json'), JSON.stringify(tweets));
@@ -77,6 +78,8 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('#tweet-1000 img[src="/archive/media/photo.png"]')].length === 2 &&
     [...document.querySelectorAll('#tweet-1000 img[src="/archive/media/photo.png"]')].every(img => img.complete && img.naturalWidth > 0));
   assert.equal(await first.locator('.quote-card .quote-text').textContent(), 'Quoted words');
+  // X's escaped characters show as themselves.
+  assert.match(await page.locator('#tweet-1004 .tweet-text').textContent(), /bread & 1 < 2 > 0$/);
   assert.equal(await first.locator('.article-card').getAttribute('href'), '/archive/articles/1000.html');
   // Translation shows progress, then the English text with a toggle back to the original.
   const french = page.locator('#tweet-1002');
