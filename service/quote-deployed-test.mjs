@@ -34,5 +34,5 @@ try {
   const images=[...document.querySelectorAll('.quote-card .media-grid img')];
   return images.length===count && images.every(i=>i.complete&&i.naturalWidth>0);
  },expected);
- console.log('PASS: protected live archive and quoted photos on a tweet's page.');
+ console.log('PASS: protected live archive and quoted photos on the tweet page.');
 }finally{await browser.close();}
