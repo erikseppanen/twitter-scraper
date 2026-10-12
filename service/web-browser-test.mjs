@@ -91,6 +91,21 @@ try {
   const sidebar = page.locator('.related-sidebar');
   await sidebar.locator('#tweet-1001').waitFor();
   assert.equal(await sidebar.locator('.tweet').count(), 2);
+  // Every action fits inside its tweet; a narrow sidebar shows icons only.
+  const actionsFit = () => page.evaluate(() => [...document.querySelectorAll('.actions')].every(row => {
+    const right = row.closest('.tweet-body').getBoundingClientRect().right + 0.5;
+    return [...row.children].every(action => action.getBoundingClientRect().right <= right);
+  }));
+  const labelsShown = selector => page.locator(selector + ' .action-label').first().isVisible();
+  assert.ok(await actionsFit());
+  await page.setViewportSize({ width: 1100, height: 720 });
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.related-sidebar .action-label')).display === 'none');
+  assert.ok(await actionsFit());
+  assert.ok(await labelsShown('.timeline'));
+  await page.setViewportSize({ width: 1440, height: 720 });
+  await page.waitForFunction(() => document.querySelector('.related-sidebar').getBoundingClientRect().width === 450);
+  assert.ok(await actionsFit() && await labelsShown('.related-sidebar'));
+  await page.setViewportSize({ width: 1280, height: 720 });
   assert.ok(page.url().includes('related=1000'));
   await sidebar.locator('#tweet-1001').getByRole('button', { name: 'Related' }).click();
   await sidebar.locator('#tweet-1003').waitFor();
@@ -228,6 +243,7 @@ try {
   // Phone width keeps the layout inside the screen.
   await page.setViewportSize({ width: 390, height: 844 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.ok(await actionsFit() && await labelsShown('.timeline'));
   // On a phone, swiping moves through the shuffle, and Related opens over it.
   const swipe = dx => page.evaluate(dx => {
     const el = document.querySelector('main.random');

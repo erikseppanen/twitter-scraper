@@ -31,11 +31,11 @@ export default function Tweet({ tweet, query, onAuthor, onRelated, onRemove, act
         <QuoteCard quote={tweet.quote} parentId={tweet.tweetId} query={query} />
         {children}
         <footer className="actions">
-          {onRelated && <button type="button" className="action" onClick={() => onRelated(tweet.tweetId)} title="Show related likes"><RelatedIcon />Related</button>}
+          {onRelated && <button type="button" className="action" onClick={() => onRelated(tweet.tweetId)} title="Show related likes" aria-label="Related"><RelatedIcon /><span className="action-label">Related</span></button>}
           {/* The stable address is the link target; clicking stays in the app. */}
-          <a className="action" href={'/tweet/' + tweet.tweetId} onClick={inApp(page)} title="Permanent link to this tweet"><LinkIcon />Permalink</a>
-          <a className="action" href={'https://x.com/i/status/' + tweet.tweetId} target="_blank" rel="noopener noreferrer" title="View on X"><ExternalIcon />X</a>
-          {onRemove && <button type="button" className="action remove" onClick={() => onRemove(tweet)} title="Remove from archive"><TrashIcon />Remove</button>}
+          <a className="action" href={'/tweet/' + tweet.tweetId} onClick={inApp(page)} title="Permanent link to this tweet" aria-label="Permalink"><LinkIcon /><span className="action-label">Permalink</span></a>
+          <a className="action" href={'https://x.com/i/status/' + tweet.tweetId} target="_blank" rel="noopener noreferrer" title="View on X" aria-label="X"><ExternalIcon /><span className="action-label">X</span></a>
+          {onRemove && <button type="button" className="action remove" onClick={() => onRemove(tweet)} title="Remove from archive" aria-label="Remove"><TrashIcon /><span className="action-label">Remove</span></button>}
         </footer>
       </div>
     </article>

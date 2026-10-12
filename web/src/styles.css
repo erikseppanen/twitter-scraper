@@ -10,8 +10,12 @@
   --danger: #f4212e;
   --mark-bg: #fff3cd;
   --mark-text: #0f1419;
+  --sidebar: 350px;
   color-scheme: light;
 }
+/* The right sidebar grows into spare room beside the 600px timeline, up to 450px. */
+@media (min-width: 1100px) { :root { --sidebar: clamp(350px, 100vw - 760px, 450px); } }
+@media (min-width: 1280px) { :root { --sidebar: clamp(350px, 100vw - 940px, 450px); } }
 :root[data-theme="dark"] {
   --bg: #000000;
   --bg-hover: rgba(255, 255, 255, 0.03);
@@ -134,7 +138,7 @@ a.pill { display: inline-flex; align-items: center; color: var(--text); text-dec
 .tweet.full .tweet-text .text { font-size: 17px; line-height: 24px; }
 .avatar { display: block; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
 .avatar-placeholder { display: block; background: var(--bg-input); }
-.tweet-body { flex: 1; min-width: 0; }
+.tweet-body { flex: 1; min-width: 0; container-type: inline-size; }
 .tweet-header { display: flex; align-items: baseline; gap: 4px; min-width: 0; white-space: nowrap; }
 .display-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .secondary { color: var(--text-secondary); }
@@ -160,6 +164,8 @@ span.translation-note { color: var(--text-secondary); cursor: default; }
   color: var(--text-secondary); font-size: 13px; cursor: pointer;
 }
 .action:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); text-decoration: none; }
+/* Too narrow for the labels, as in a sidebar: icons only, named by their tooltips. */
+@container (max-width: 299px) { .action-label { display: none; } .actions { max-width: 240px; } }
 .action.remove:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .show-more { border: 0; background: none; padding: 0; margin-top: 2px; color: var(--accent); cursor: pointer; }
 .show-more:hover { text-decoration: underline; }
@@ -209,7 +215,7 @@ span.translation-note { color: var(--text-secondary); cursor: default; }
 /* Related likes */
 .related { min-width: 0; background: var(--bg); }
 .related-sidebar {
-  position: sticky; top: 0; width: 350px; max-height: 100vh; overflow-y: auto; flex-shrink: 0;
+  position: sticky; top: 0; width: var(--sidebar); max-height: 100vh; overflow-y: auto; flex-shrink: 0;
   margin-top: 12px; border: 1px solid var(--border); border-radius: 16px; overscroll-behavior: contain;
 }
 .related-overlay { position: fixed; inset: 0; z-index: 30; overflow-y: auto; overscroll-behavior: contain; padding-bottom: env(safe-area-inset-bottom); }
@@ -228,7 +234,7 @@ span.translation-note { color: var(--text-secondary); cursor: default; }
 .related-sidebar .tweet { padding: 12px; }
 .related-sidebar .media-count-1 .media-item img, .related-sidebar .media-count-1 .media-item video { max-height: 280px; }
 body.no-scroll { overflow: hidden; }
-.sidebar-spacer { width: 350px; flex-shrink: 0; }
+.sidebar-spacer { width: var(--sidebar); flex-shrink: 0; }
 
 /* Single tweet page */
 .page-bar { display: flex; align-items: center; gap: 16px; padding: 6px 16px; }
