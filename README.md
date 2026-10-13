@@ -82,6 +82,9 @@ archive and a separate semantic cache; it does not run scraping or modify the ar
 
 ## Architecture
 
+For a full walkthrough — what runs on the Mini, how code is deployed, how an update
+collects likes, and where the data lives — see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ```mermaid
 flowchart TD
     Schedule[Four-hour schedule or Update now] --> Worker[Node worker + Playwright]
