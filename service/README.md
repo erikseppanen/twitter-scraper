@@ -3,8 +3,8 @@
 Runs the existing Clojure importer from a Node service, with a React app at `/app/` and a
 dedicated Chrome profile.
 Updates run every four hours, with an Update now button. Scraping does not require an LLM.
-The knowledge explorer uses a small local embedding model for semantic search and related
-tweets. It downloads model weights on first use and keeps tweet text on this machine.
+Search by meaning and Related use a small local embedding model to compare likes.
+It downloads model weights on first use and keeps tweet text on this machine.
 
 ## Mac Mini installation
 

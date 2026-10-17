@@ -8,18 +8,18 @@ const LIMIT = 8;
 // Semantic neighbors of one tweet: a sidebar on wide screens, full screen on phones,
 // or a section under the tweet on its own page.
 export default function RelatedPanel({ id, byId, mode, canGoBack, onBack, onClose, onRelated, onRemove }) {
-  const [state, setState] = useState({ id: null, nodes: [], message: 'Finding related likes…' });
+  const [state, setState] = useState({ id: null, ids: [], message: 'Finding related likes…' });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    setState({ id, nodes: [], message: 'Finding related likes…' });
-    getJSON('/api/knowledge/graph?id=' + encodeURIComponent(id)).then(
-      graph => { if (!cancelled) setState({ id, nodes: graph.nodes.slice(1), message: '' }); },
+    setState({ id, ids: [], message: 'Finding related likes…' });
+    getJSON('/api/knowledge/related?id=' + encodeURIComponent(id)).then(
+      body => { if (!cancelled) setState({ id, ids: body.related.map(r => r.tweetId), message: '' }); },
       error => {
         if (cancelled) return;
         // While the index builds the server answers 503; check again shortly.
-        setState({ id, nodes: [], message: error.status === 404 ? 'This tweet is not in the related-likes index yet.' : error.message, building: error.status === 503 });
+        setState({ id, ids: [], message: error.status === 404 ? 'No related likes: this tweet has no text to compare, or is not indexed yet.' : error.message, building: error.status === 503 });
       },
     );
     return () => { cancelled = true; };
@@ -40,7 +40,7 @@ export default function RelatedPanel({ id, byId, mode, canGoBack, onBack, onClos
   }, [mode, onClose]);
 
   // Prefer the archive's own copy, and drop tweets removed since the index was built.
-  const related = state.nodes.map(node => byId.get(node.tweet.tweetId)).filter(Boolean).slice(0, LIMIT);
+  const related = state.ids.map(tweetId => byId.get(tweetId)).filter(Boolean).slice(0, LIMIT);
   const center = byId.get(id);
   return (
     <aside className={'related related-' + mode} aria-label="Related likes">

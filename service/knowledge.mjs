@@ -3,10 +3,12 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 export const MODEL = 'Xenova/all-MiniLM-L6-v2';
-const TOPICS = ['Technology and AI', 'Science and nature', 'History and culture', 'Politics and society', 'Economics and finance', 'Health and wellbeing', 'Art and creativity', 'Learning and philosophy', 'Work and productivity', 'Food and cooking', 'Humor and everyday life'];
+// The words a tweet's meaning is computed from. Links are left out: the model reads
+// a t.co address as words, and link-only tweets would match everything.
 export function contentOf(tweet) {
   return [tweet.text, tweet.article?.title, tweet.article?.previewText,
-    tweet.quote?.text, tweet.quote?.article?.title, tweet.quote?.article?.previewText].filter(Boolean).join('\n');
+    tweet.quote?.text, tweet.quote?.article?.title, tweet.quote?.article?.previewText].filter(Boolean).join('\n')
+    .replace(/https?:\/\/\S+/g, ' ').replace(/[ \t]+/g, ' ').trim();
 }
 export function chunks(text) {
   const words = text.trim().split(/\s+/);
@@ -15,29 +17,7 @@ export function chunks(text) {
   return result;
 }
 export const cosine = (a, b) => a.reduce((sum, value, i) => sum + value * (b[i] || 0), 0);
-const STOP = new Set('a an and are as at be been being but by can could did do does for from get had has have he her here him his how i if in into is it its just like me more most my no not of on one or our out over she so some than that the their them then there these they this those to too up us very was we were what when where which who why will with would you your https http www com pic twitter'.split(' '));
-export function describeNeighborhood(nodes) {
-  const topics = new Map(), phrases = new Map();
-  for (const { tweet, score } of nodes) {
-    if (tweet.topic && tweet.topic !== 'Other') topics.set(tweet.topic, (topics.get(tweet.topic) || 0) + score);
-    const words = contentOf(tweet).toLowerCase().replace(/https?:\/\/\S+|@\w+/g, ' ').match(/[\p{L}][\p{L}'-]*/gu) || [];
-    const seen = new Set();
-    for (let i = 0; i < words.length; i++) {
-      if (STOP.has(words[i]) || words[i].length < 3) continue;
-      seen.add(words[i]);
-      if (words[i + 1] && !STOP.has(words[i + 1]) && words[i + 1].length >= 3) seen.add(words[i] + ' ' + words[i + 1]);
-    }
-    for (const phrase of seen) { const entry = phrases.get(phrase) || { count: 0, score: 0 }; entry.count++; entry.score += score; phrases.set(phrase, entry); }
-  }
-  const ranked = [...phrases].filter(([, value]) => value.count >= Math.min(2, nodes.length))
-    .sort((a, b) => (b[1].score * (b[0].includes(' ') ? 1.8 : 1)) - (a[1].score * (a[0].includes(' ') ? 1.8 : 1)));
-  const themes = [];
-  for (const [phrase] of ranked) {
-    if (!themes.some(t => t.split(' ').some(word => phrase.split(' ').includes(word)))) themes.push(phrase);
-    if (themes.length === 3) break;
-  }
-  return { title: [...topics].sort((a, b) => b[1] - a[1])[0]?.[0] || 'Connected ideas', themes };
-}
+export const MIN_SCORE = 0.3, SPREAD = 0.15;
 const hash = text => createHash('sha256').update(text).digest('hex');
 function normalize(v) { const n = Math.hypot(...v) || 1; return v.map(x => x / n); }
 
@@ -82,14 +62,10 @@ export class KnowledgeIndex {
     try { cache = JSON.parse(await readFile(cacheFile, 'utf8')); } catch (e) { if (e.code !== 'ENOENT' && !(e instanceof SyntaxError)) throw e; }
     const old = new Map(cache.model === MODEL && cache.version === 1 ? cache.rows?.map(r => [r.id, r]) : []);
     const rows = [], vectors = [], cachedRows = [];
-    const topics = await Promise.all(TOPICS.map(t => this.embedding(t)));
     for (const tweet of tweets) {
       const text = contentOf(tweet), digest = hash(text), previous = old.get(String(tweet.tweetId));
       const vector = previous?.hash === digest ? previous.vector : await this.embedding(text);
-      const scores = topics.map(v => cosine(vector, v));
-      const best = Math.max(...scores);
-      const topic = best >= 0.2 ? TOPICS[scores.indexOf(best)] : 'Other';
-      rows.push({ ...tweet, topic }); vectors.push(vector);
+      rows.push({ tweetId: String(tweet.tweetId) }); vectors.push(vector);
       cachedRows.push({ id: String(tweet.tweetId), hash: digest, vector });
       this.status.indexed = rows.length;
     }
@@ -100,23 +76,25 @@ export class KnowledgeIndex {
     this.status = { state: 'ready', indexed: rows.length, total: rows.length, message: 'Semantic index ready.' };
   }
   summary() {
-    return { ...this.status, available: this.rows.length, topics: [...new Set(this.rows.map(r => r.topic))].sort() };
+    return { ...this.status, available: this.rows.length };
   }
-  rank(vector, { exclude, topic, limit = 30 } = {}) {
-    return this.rows.map((tweet, i) => ({ tweet, score: cosine(vector, this.vectors[i]) }))
-      .filter(r => r.tweet.tweetId !== exclude && (!topic || r.tweet.topic === topic))
+  rank(vector, { exclude, limit = 30 } = {}) {
+    return this.rows.map((row, i) => ({ tweetId: row.tweetId, score: cosine(vector, this.vectors[i]) }))
+      .filter(r => r.tweetId !== exclude)
       .sort((a, b) => b.score - a.score).slice(0, limit);
   }
-  async search(query, topic) {
-    if (!query.trim()) return this.rows.filter(t => !topic || t.topic === topic).slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 40).map(tweet => ({ tweet, score: null }));
-    return this.rank(await this.embedding(query), { topic });
+  // Likes about the same thing as the query. How high scores run depends on the query,
+  // so keep matches above a floor and close to the best one.
+  async search(query) {
+    if (!query.trim()) return [];
+    const ranked = this.rank(await this.embedding(query), { limit: 50 });
+    const cutoff = Math.max(MIN_SCORE, (ranked[0]?.score ?? 0) - SPREAD);
+    return ranked.filter(r => r.score >= cutoff);
   }
-  graph(id) {
-    const index = this.rows.findIndex(t => t.tweetId === id);
+  // The likes closest in meaning to one tweet.
+  related(id) {
+    const index = this.rows.findIndex(row => row.tweetId === id);
     if (index < 0) return null;
-    const center = this.rows[index];
-    const neighbors = this.rank(this.vectors[index], { exclude: id, limit: 12 }).filter(r => r.score > 0.15);
-    const nodes = [{ tweet: center, score: 1 }, ...neighbors];
-    return { center: id, nodes, neighborhood: describeNeighborhood(nodes) };
+    return this.rank(this.vectors[index], { exclude: id, limit: 12 }).filter(r => r.score > 0.15);
   }
 }

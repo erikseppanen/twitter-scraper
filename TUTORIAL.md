@@ -30,8 +30,11 @@ For configuration and token rotation, see [service operations](service/README.md
 
 ## Browsing
 
-- Search tweet text, author names/handles, and article titles. Your search, filters
-  and sort stay in the address, so reloading or sharing the link keeps them.
+- Search finds likes containing all your words, in the tweet, its quoted tweet, an
+  article, or the author's name, and also likes about the same thing in other words
+  (labeled **Similar meaning**). Put a phrase in "quotes" to match it exactly. Results
+  come best match first; your search, filters and sort stay in the address, so
+  reloading or sharing the link keeps them.
 - Filter by year, month, or author. Select an author's name or @handle on any tweet to
   see all your likes from them.
 - Order newest first, oldest first, or **Shuffled**. **Reshuffle** picks a new order; the shuffle is kept in the
@@ -43,8 +46,7 @@ For configuration and token rotation, see [service operations](service/README.md
   page with related likes.
 - Select an article card to read the article in the app, with its images.
 - **Related** shows similar likes: in a sidebar on wide screens, full screen on phones.
-- **Explore** searches by meaning and lists related ideas for a tweet, with **Copy link**
-  and **Copy Org link** for notes.
+- A tweet's own page has **Copy link** and **Copy Org link** for notes.
 - Non-English text appears in English; select the note above it to see the original.
 - Use the half-circle in the menu for light or dark mode.
 - Choose **Remove**, then confirm, to delete a tweet from the archive. It

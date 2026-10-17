@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Tweet from '../components/Tweet.jsx';
 import RelatedPanel from '../components/RelatedPanel.jsx';
-import { FILTERS, readFilters, writeFilters, describeFilters, filterTweets, shuffleTweets, newSeed, parseSeed } from '../tweets.js';
+import { FILTERS, readFilters, writeFilters, describeFilters, viewTweets, newSeed, parseSeed } from '../tweets.js';
+import { useSearch } from '../useSearch.js';
 import { navigate, replaceAddress } from '../router.js';
 
 // The filters, shuffle seed and position live in the address, so returning here
@@ -25,7 +26,9 @@ export default function Random({ tweets, byId, error, wide, onRemove }) {
   const touch = useRef(null);
   const { filters, seed } = view;
 
-  const order = useMemo(() => shuffleTweets(filterTweets(tweets || [], filters), seed), [tweets, filters, seed]);
+  // The same search as Likes, so One at a time shows the same likes.
+  const search = useSearch(tweets, byId, filters.query);
+  const order = useMemo(() => viewTweets(tweets || [], search, filters, 'random', seed), [tweets, search, filters, seed]);
   // A removal shortens the list; stay at the same position, which now holds the next tweet.
   const index = Math.min(view.index, Math.max(order.length - 1, 0));
   const tweet = order[index];

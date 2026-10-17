@@ -3,7 +3,6 @@ import Nav from './components/Nav.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
 import Timeline from './pages/Timeline.jsx';
 import TweetPage from './pages/TweetPage.jsx';
-import Explore from './pages/Explore.jsx';
 import Updates from './pages/Updates.jsx';
 import Random from './pages/Random.jsx';
 import ArticlePage from './pages/ArticlePage.jsx';
@@ -69,7 +68,6 @@ export default function App() {
   // Each navigation remounts the page so it reads its state from the new address.
   let page;
   if (route.page === 'tweet') page = <TweetPage key={navigation} id={route.id} {...shared} />;
-  else if (route.page === 'explore') page = <Explore key={navigation} id={route.id} {...shared} />;
   else if (route.page === 'article') page = <ArticlePage key={navigation} id={route.id} {...shared} />;
   else if (route.page === 'random') page = <Random key={navigation} {...shared} />;
   else if (route.page === 'updates') page = <Updates key={navigation} wide={wide} />;

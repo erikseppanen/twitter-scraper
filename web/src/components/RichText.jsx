@@ -1,4 +1,5 @@
-import { tokenize, highlight } from '../tweets.js';
+import { tokenize } from '../tweets.js';
+import { highlight } from '../search.js';
 
 function Highlighted({ text, query }) {
   return highlight(text, query).map((piece, i) => piece.match ? <mark key={i}>{piece.text}</mark> : piece.text);

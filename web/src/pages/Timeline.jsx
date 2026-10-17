@@ -2,14 +2,16 @@ import { useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import Header from '../components/Header.jsx';
 import Tweet from '../components/Tweet.jsx';
 import RelatedPanel from '../components/RelatedPanel.jsx';
-import { PAGE_SIZE, FILTERS, readFilters, writeFilters, describeFilters, filterTweets, orderTweets, newSeed, parseSeed, facets as countFacets } from '../tweets.js';
+import { PAGE_SIZE, FILTERS, SORTS, readFilters, writeFilters, describeFilters, viewTweets, defaultSort, effectiveSort, newSeed, parseSeed, facets as countFacets } from '../tweets.js';
+import { useSearch } from '../useSearch.js';
 import { replaceAddress } from '../router.js';
 
 // Search, filters, order and the open Related panel live in the address.
 function readLocation() {
   const params = new URLSearchParams(location.search);
   const related = params.get('related');
-  const sort = ['asc', 'random'].includes(params.get('sort')) ? params.get('sort') : 'desc';
+  // No sort in the address means the default: best match while searching, else newest.
+  const sort = SORTS.includes(params.get('sort')) ? params.get('sort') : null;
   return {
     filters: readFilters(params),
     sort,
@@ -23,12 +25,13 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
   const [trail, setTrail] = useState(() => view.related ? [view.related] : []);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const sentinel = useRef(null);
-  const { filters, sort, seed, related } = view;
+  const { filters, seed, related } = view;
   const deferredFilters = useDeferredValue(filters);
+  const sort = effectiveSort(view.sort, filters.query);
 
   useEffect(() => {
     const params = writeFilters(new URLSearchParams(), filters);
-    if (sort !== 'desc') params.set('sort', sort);
+    if (sort !== defaultSort(filters.query)) params.set('sort', sort);
     if (seed) params.set('seed', seed);
     if (related) params.set('related', related);
     const search = params.toString();
@@ -36,7 +39,9 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
   }, [filters, sort, seed, related]);
 
   const facets = useMemo(() => countFacets(tweets || []), [tweets]);
-  const visible = useMemo(() => orderTweets(filterTweets(tweets || [], deferredFilters), sort, seed), [tweets, deferredFilters, sort, seed]);
+  const search = useSearch(tweets, byId, deferredFilters.query);
+  const visible = useMemo(() => viewTweets(tweets || [], search, deferredFilters, sort, seed), [tweets, search, deferredFilters, sort, seed]);
+  const matchedBy = useMemo(() => new Map((search?.results || []).map(r => [r.tweet.tweetId, r.why])), [search]);
 
   useEffect(() => { setLimit(PAGE_SIZE); }, [deferredFilters, sort, seed]);
 
@@ -81,7 +86,11 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
   const close = () => { setTrail([]); setView(current => ({ ...current, related: null })); };
 
   const shown = Math.min(limit, visible.length);
-  const status = tweets ? `Showing ${shown} of ${visible.length}${describeFilters(deferredFilters)} from ${tweets.length} tweets${sort === 'random' ? ', shuffled' : ''}` : error || 'Loading…';
+  const byMeaning = search ? visible.filter(tweet => matchedBy.get(tweet.tweetId) === 'meaning').length : 0;
+  const status = tweets
+    ? `Showing ${shown} of ${visible.length}${describeFilters(deferredFilters)} from ${tweets.length} tweets${sort === 'random' ? ', shuffled' : ''}` +
+      (byMeaning ? ` · ${byMeaning} by meaning only` : '') + (search?.note ? ' · ' + search.note : '')
+    : error || 'Loading…';
   const panel = related && tweets && (
     <RelatedPanel id={related} byId={byId} mode={wide ? 'sidebar' : 'overlay'} canGoBack={trail.length > 1}
       onBack={back} onClose={close} onRelated={openRelated} onRemove={onRemove} />
@@ -93,9 +102,11 @@ export default function Timeline({ tweets, byId, error, wide, onRemove }) {
           sort={sort} setSort={setSort} oneAtATime={oneAtATime} />
         {visible.slice(0, shown).map(tweet => (
           <Tweet key={tweet.tweetId} tweet={tweet} query={deferredFilters.query} active={tweet.tweetId === related}
-            onRelated={startRelated} onRemove={onRemove} />
+            onRelated={startRelated} onRemove={onRemove}>
+            {matchedBy.get(tweet.tweetId) === 'meaning' && <span className="badge match-note" title="No exact word match; this like is about something similar">Similar meaning</span>}
+          </Tweet>
         ))}
-        {tweets && !visible.length && <p className="empty">No likes match these filters.</p>}
+        {tweets && !visible.length && <p className="empty">{search?.note === 'searching by meaning…' ? 'Searching…' : 'No likes match these filters.'}</p>}
         <div ref={sentinel} />
       </main>
       {wide ? (panel || <aside className="related related-sidebar related-hint"><p>Choose <strong>Related</strong> on a tweet to see similar likes here.</p></aside>) : panel}

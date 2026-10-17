@@ -99,15 +99,18 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
       if (req.method === 'GET' && url.pathname === '/') return reply(200, dashboard, 'text/html; charset=utf-8');
       const tweetPage = /^\/tweet\/\d+$/.test(url.pathname);
       const knowledgePage = url.pathname === '/knowledge' || /^\/knowledge\/tweet\/\d+$/.test(url.pathname);
+      // Explore became part of Likes; its old addresses still arrive at the same tweet or search.
+      const explorePage = /^\/app\/explore(\/tweet\/\d+)?\/?$/.exec(url.pathname);
       const appPage = url.pathname === '/app' || url.pathname.startsWith('/app/');
       if (!authorized && req.method === 'GET' && (knowledgePage || tweetPage || appPage || url.pathname.startsWith('/archive/'))) {
         res.writeHead(302, { Location: '/?next=' + encodeURIComponent(url.pathname + url.search) }); return res.end();
       }
       if (!authorized) return reply(401, { error: 'Open your private bookmark to access the archive.' });
       // Stable links (Permalink, and /knowledge/tweet/ID in saved notes) open the app.
-      if (req.method === 'GET' && (tweetPage || knowledgePage)) {
-        const id = url.pathname.split('/').at(-1);
-        res.writeHead(302, { Location: tweetPage ? '/app/tweet/' + id : '/app/explore' + (/^\d+$/.test(id) ? '/tweet/' + id : '') });
+      if (req.method === 'GET' && (tweetPage || knowledgePage || explorePage)) {
+        const id = /\/tweet\/(\d+)\/?$/.exec(url.pathname)?.[1];
+        const query = explorePage && url.searchParams.get('q');
+        res.writeHead(302, { Location: id ? '/app/tweet/' + id : '/app/' + (query ? '?' + new URLSearchParams({ query }) : '') });
         return res.end();
       }
       if (req.method === 'GET' && appPage) {
@@ -129,20 +132,19 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
         return reply(200, await translations.get(id, url.searchParams.get('quote') === '1'));
       }
       if (req.method === 'GET' && url.pathname === '/api/knowledge/status') return reply(200, knowledge.summary());
-      if (req.method === 'GET' && ['/api/knowledge/search', '/api/knowledge/graph'].includes(url.pathname)) {
+      if (req.method === 'GET' && ['/api/knowledge/search', '/api/knowledge/related'].includes(url.pathname)) {
         if (!knowledge.rows.length) return reply(503, { error: knowledge.status.message });
+        // The index drops removed tweets on its next refresh; hide them until then.
+        const kept = list => list.filter(r => !removed.has(r.tweetId));
         if (url.pathname.endsWith('/search')) {
           const query = url.searchParams.get('q') || '';
           if (query.length > 2000) return reply(400, { error: 'Search is limited to 2,000 characters.' });
-          const results = await knowledge.search(query, url.searchParams.get('topic'));
-          return reply(200, { results: results.filter(r => !removed.has(r.tweet.tweetId)) });
+          return reply(200, { results: kept(await knowledge.search(query)) });
         }
         const id = url.searchParams.get('id');
-        const graph = removed.has(id) ? null : knowledge.graph(id);
-        if (!graph) return reply(404, { error: 'Tweet not found in the semantic index.' });
-        // The index drops removed tweets on its next refresh; hide them until then.
-        if (removed.size) graph.nodes = graph.nodes.filter(n => !removed.has(n.tweet.tweetId));
-        return reply(200, graph);
+        const related = removed.has(id) ? null : knowledge.related(id);
+        if (!related) return reply(404, { error: 'Tweet not found in the semantic index.' });
+        return reply(200, { related: kept(related) });
       }
       if (req.method === 'GET' && url.pathname === '/api/status') return reply(200, { ...state, busy: worker.busy });
       if (req.method === 'POST' && ['/api/update', '/api/connect', '/api/finish'].includes(url.pathname)) {

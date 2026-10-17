@@ -6,13 +6,8 @@ const time = tweet => {
   return Number.isNaN(value) ? null : value;
 };
 
-export function searchableText(tweet) {
-  const user = tweet.user || {};
-  return [tweet.text, user.name, user.screenName, tweet.article?.title, tweet.article?.previewText].filter(Boolean).join(' ').toLowerCase();
-}
-
-export function filterTweets(tweets, { query = '', author = '', year = '', month = '' }) {
-  const needle = query.trim().toLowerCase();
+// Author, year and month filters; the search query is handled by search.js.
+export function filterTweets(tweets, { author = '', year = '', month = '' }) {
   return tweets.filter(tweet => {
     if (author && tweet.user?.screenName !== author) return false;
     if (year || month) {
@@ -22,7 +17,7 @@ export function filterTweets(tweets, { query = '', author = '', year = '', month
       if (year && date.getFullYear() !== Number(year)) return false;
       if (month && date.getMonth() + 1 !== Number(month)) return false;
     }
-    return !needle || searchableText(tweet).includes(needle);
+    return true;
   });
 }
 
@@ -54,8 +49,16 @@ export function shuffleTweets(tweets, seed) {
 export const newSeed = () => 1 + Math.floor(Math.random() * 999999);
 export const parseSeed = value => /^[1-9]\d{0,8}$/.test(value || '') ? Number(value) : null;
 
-export function orderTweets(tweets, sort, seed) {
-  return sort === 'random' ? shuffleTweets(tweets, seed) : sortTweets(tweets, sort);
+// While searching, results come best match first unless another order is chosen.
+export const SORTS = ['best', 'desc', 'asc', 'random'];
+export const defaultSort = query => query.trim() ? 'best' : 'desc';
+export const effectiveSort = (sort, query) => sort === 'best' && !query.trim() ? 'desc' : sort || defaultSort(query);
+
+// Search results (already best first, see useSearch) or all tweets, then the filters and order.
+export function viewTweets(tweets, search, filters, sort, seed) {
+  const filtered = filterTweets(search ? search.results.map(r => r.tweet) : tweets, filters);
+  if (sort === 'random') return shuffleTweets(filtered, seed);
+  return sort === 'best' ? filtered : sortTweets(filtered, sort);
 }
 
 // Search and filters, as kept in the address.
@@ -113,21 +116,6 @@ export function tokenize(text = '') {
   }
   if (last < text.length) parts.push({ type: 'text', text: text.slice(last) });
   return parts;
-}
-
-// Split text into alternating plain and matched pieces for highlighting.
-export function highlight(text = '', query = '') {
-  const needle = query.trim();
-  if (!needle) return [{ text, match: false }];
-  const lower = text.toLowerCase(), target = needle.toLowerCase(), pieces = [];
-  let from = 0, index;
-  while ((index = lower.indexOf(target, from)) !== -1) {
-    if (index > from) pieces.push({ text: text.slice(from, index), match: false });
-    pieces.push({ text: text.slice(index, index + target.length), match: true });
-    from = index + target.length;
-  }
-  if (from < text.length) pieces.push({ text: text.slice(from), match: false });
-  return pieces;
 }
 
 export function mediaSource(item) {

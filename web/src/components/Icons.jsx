@@ -13,7 +13,6 @@ const navIcon = path => function Icon() {
   return <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{path}</svg>;
 };
 export const HomeIcon = navIcon(<path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />);
-export const ExploreIcon = navIcon(<><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></>);
 export const RandomIcon = navIcon(<path d="M3 7h3.5c4.5 0 6.5 10 11 10H21M3 17h3.5c1.8 0 3.1-1.6 4.2-3.5M13.3 9.5C14.4 8 15.6 7 17.5 7H21M18 4l3 3-3 3M18 14l3 3-3 3" />);
 export const UpdatesIcon = navIcon(<><path d="M20 12a8 8 0 0 1-14.2 5M4 12a8 8 0 0 1 14.2-5" /><path d="M18.5 3v4h-4M5.5 21v-4h4" /></>);
 export const ThemeIcon = navIcon(<><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" /></>);

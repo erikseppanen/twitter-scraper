@@ -27,6 +27,7 @@ export default function Header({ filters, setFilter, clear, facets, sort, setSor
           {facets.authors.map(([name, count]) => <option key={name} value={name}>@{name} ({count})</option>)}
         </select>
         <select value={sort} onChange={e => setSort(e.target.value)} aria-label="Order">
+          {query.trim() && <option value="best">Best match</option>}
           <option value="desc">Newest first</option>
           <option value="asc">Oldest first</option>
           <option value="random">Shuffled</option>

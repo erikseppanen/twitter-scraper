@@ -32,7 +32,6 @@ export function useNavigation() {
 export function parseRoute(pathname = location.pathname) {
   let match;
   if ((match = /^\/app\/tweet\/(\d+)\/?$/.exec(pathname))) return { page: 'tweet', id: match[1] };
-  if ((match = /^\/app\/explore(?:\/tweet\/(\d+))?\/?$/.exec(pathname))) return { page: 'explore', id: match[1] || null };
   if (/^\/app\/updates\/?$/.test(pathname)) return { page: 'updates' };
   if (/^\/app\/random\/?$/.test(pathname)) return { page: 'random' };
   if ((match = /^\/app\/article\/(\d+)\/?$/.exec(pathname))) return { page: 'article', id: match[1] };

@@ -319,7 +319,7 @@ the cutoff, so the next update looks for overlap with the archive again. Losing
 | File | What it is |
 | --- | --- |
 | `models/` | Downloaded model weights: MiniLM for related tweets, NLLB for translation. |
-| `knowledge.json` | Vectors that describe each tweet's meaning, used by **Related** and **Explore**. Rebuilt from `tweets.json`; the service checks for changes every minute. |
+| `knowledge.json` | Vectors that describe each tweet's meaning, used by **Related** and search. Rebuilt from `tweets.json`; the service checks for changes every minute. |
 | `translations/` | Saved English translations, keyed by the original text. |
 
 You can delete these. The service rebuilds them, slowly.
@@ -346,11 +346,12 @@ flowchart LR
 ```
 
 - **The pages.** Any `/app/…` address returns the same `index.html`. The app's small
-  router (`web/src/router.js`) shows the right page: Likes, a tweet, an article, Explore,
+  router (`web/src/router.js`) shows the right page: Likes, a tweet, an article,
   Random or Updates.
-- **The data.** On start the app downloads `/archive/tweets.json`. All searching,
-  filtering, sorting and shuffling then happens in the browser (`web/src/tweets.js`),
-  so it's instant.
+- **The data.** On start the app downloads `/archive/tweets.json`. Keyword search,
+  filtering, sorting and shuffling then happen in the browser (`web/src/search.js`,
+  `web/src/tweets.js`), so they're instant. Search also asks the Mini for likes with a
+  similar meaning (`web/src/useSearch.js`) and merges them in when they arrive.
   - The server sends that file gzip-compressed (about 0.9 MB instead of 2.6 MB), with an
     ETag. On the next visit the browser asks whether it changed, and gets "304 Not
     Modified" with no download when it hasn't.
@@ -361,7 +362,7 @@ flowchart LR
 - **The APIs** need the same cookie:
   - **Updates**: `/api/status`, `/api/update`, `/api/connect`, `/api/finish`.
   - **Remove**: `/api/remove`.
-  - **Related and Explore**: `/api/knowledge/*`.
+  - **Related and search by meaning**: `/api/knowledge/related`, `/api/knowledge/search`.
   - **Translation**: `/api/translation`.
 
   POST requests must also come from the archive's own address.

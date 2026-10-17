@@ -23,8 +23,8 @@ const stateDir = path.resolve('.service/knowledge-test');
 const knowledge = new KnowledgeIndex(root, stateDir);
 await knowledge.refresh();
 assert.equal(knowledge.status.state, 'ready', knowledge.status.error);
-assert.equal(knowledge.graph('1').nodes[1].tweet.tweetId, '2');
-assert.ok(['3', '4'].includes((await knowledge.search('How do I make a loaf at home?'))[0].tweet.tweetId));
+assert.equal(knowledge.related('1')[0].tweetId, '2');
+assert.ok(['3', '4'].includes((await knowledge.search('How do I make a loaf at home?'))[0].tweetId));
 console.log('PASS: real local embeddings rank paraphrases and related tweets.');
 const port = 14329, origin = 'http://127.0.0.1:' + port;
 const { server, config } = await createApp({ root, stateDir: path.join(root, '.service'), publicOrigin: origin, schedule: false, knowledgeIndex: knowledge });
@@ -35,33 +35,23 @@ try {
   const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
   const page = await context.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message));
-  // A saved Org link opens the tweet in the app's Explore page after unlocking.
+  // A saved Org link opens the tweet's page after unlocking, with its closest neighbor first.
   await page.goto(origin + '/knowledge/tweet/1');
   assert.ok(page.url().includes('?next='));
   await page.goto(origin + '/#' + config.token);
-  await page.waitForURL('**/app/explore/tweet/1');
-  await page.locator('.timeline .tweet:not(.full)').first().waitFor();
-  assert.notEqual(await page.locator('.neighborhood h2').innerText(), '');
-  assert.ok(await page.locator('.neighborhood .badge').count() > 0);
+  await page.waitForURL('**/app/tweet/1');
+  await page.locator('.related .tweet').first().waitFor();
+  assert.equal(await page.locator('.related .tweet').first().getAttribute('id'), 'tweet-2');
   assert.match(await page.locator('.timeline .tweet.full .text').innerText(), /Neural networks/);
   await page.getByRole('button', { name: 'Copy Org link', exact: true }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   assert.match(copied, /^\[\[http:\/\/127\.0\.0\.1:14329\/knowledge\/tweet\/1\]\[@example: Neural networks/);
   assert.ok(!copied.includes(config.token));
-  // The closest neighbor comes first; following it and going back works.
-  await page.locator('.timeline .tweet:not(.full)').first().getByRole('button', { name: 'Related' }).click();
-  await page.waitForURL('**/app/explore/tweet/2');
-  await page.goBack();
-  await page.waitForURL('**/app/explore/tweet/1');
-  // Real embeddings match a paraphrase.
-  await page.goto(origin + '/app/explore');
-  await page.getByLabel('Search by meaning').fill('How do I make a loaf at home?');
-  await page.getByRole('button', { name: 'Search', exact: true }).click();
-  await page.locator('.section-title', { hasText: 'Related by meaning' }).waitFor();
+  // Real embeddings find a paraphrase from the Likes search box, labeled as a meaning match.
+  await page.goto(origin + '/app/?query=' + encodeURIComponent('How do I make a loaf at home?'));
+  await page.locator('.timeline .tweet .match-note').first().waitFor();
   assert.match(await page.locator('.timeline .tweet .text').first().innerText(), /bread|loaves/);
-  await page.locator('.timeline .tweet').first().getByRole('button', { name: 'Related' }).click();
-  await page.locator('.timeline .tweet:not(.full)').first().waitFor();
-  assert.match(await page.locator('.timeline .tweet.full .text').innerText(), /bread|loaves/);
+  assert.equal(await page.locator('.timeline .tweet').count(), 2);
   await page.screenshot({ path: '.service/knowledge-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -72,5 +62,5 @@ try {
   await page.locator('.related .tweet').first().waitFor();
   assert.equal(await page.locator('.related #tweet-1').count(), 0);
   assert.deepEqual(errors, []);
-  console.log('PASS: saved links unlock into Explore, Org clipboard, Related ideas navigation, back, semantic search, mobile layout, permalinks.');
+  console.log('PASS: saved links unlock into the tweet page, Org clipboard, related likes, meaning search from Likes, mobile layout, permalinks.');
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true }); }

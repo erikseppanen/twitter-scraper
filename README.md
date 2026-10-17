@@ -11,11 +11,12 @@ or [the comic](https://erikseppanen.github.io/twitter-scraper/comic.html).
 ## Everyday use
 
 Open your saved private bookmark; it signs you in and opens the archive app. The app
-follows X's layout: **Likes** (your timeline), **Explore**, **Random** and **Updates** in a left menu,
+follows X's layout: **Likes** (your timeline), **Random** and **Updates** in a left menu,
 or a bottom tab bar on phones. Automatic checks run approximately every four hours while
 the service is running; **Updates** has **Update now** and the X sign-in controls.
 
-In **Likes**, search, filter by year, month or author, sort newest, oldest or shuffled, and
+In **Likes**, search by keyword and meaning at once (see [Search](#search)), filter by year,
+month or author, sort by best match, newest, oldest or shuffled, and
 switch light/dark themes. **Random** shows likes one at a time in a shuffled order.
 Each tweet has **Related** (similar likes, in a sidebar on wide screens), **Permalink**
 (its own page at `/app/tweet/ID`), a link to X, and **Remove**. Remove deletes the tweet,
@@ -49,37 +50,48 @@ npm --prefix service run screenshots  # regenerates docs/screenshots from a made
 For live reloading, start `node service/preview-knowledge.mjs`, open its private bookmark
 once to sign in, then run `npm run dev --prefix web` and open `http://127.0.0.1:5173/app/`.
 
-## Knowledge explorer
+## Search
 
-Choose **Explore** in the app (`/app/explore`), or **Related** on any tweet there. Explore
-adds:
+The **Likes** search box combines two kinds of search into one ranked list:
 
-- Stable links at `/knowledge/tweet/TWEET_ID`, with **Copy link** and **Copy Org link**;
-  they open the tweet in Explore.
-  Org links use `[[https://YOUR-HOST/knowledge/tweet/123][description]]`. The host must
-  remain stable for saved links to keep working. Links contain no access credential;
-  a browser without a session is directed to unlock with its private bookmark and then
-  returned to the requested tweet in the same tab.
-- Search by meaning, including quoted text and article titles/previews. A query can
-  match a related idea without sharing its exact words.
-- A page for a selected tweet with a short label for its neighborhood, a few shared
-  themes, and up to twelve semantically similar likes under **Related ideas**. Choose
-  **Related** on any of them to move to its neighborhood. Similarity comes from the
-  model, not from links or replies.
-- Suggested topic filters. These are approximate classifications from a fixed topic
-  list, not manually curated categories or factual judgments.
+- **Keywords**, in the browser (`web/src/search.js`). Every word must appear, in any
+  order, in the tweet, its quoted tweet, an article title or preview, or the author's
+  name or handle. Words of three letters or more also match words they begin
+  ("bitcoin" finds "bitcoins"); accents and case are ignored, and common words like
+  "the" or "how" are skipped. Put a phrase in `"quotes"` to match it exactly. Results
+  are ranked with BM25, so rarer words and more matches count for more.
+- **Meaning**, on the Mini. The query is compared with every tweet by a small embedding
+  model, so "how to bake bread at home" can find a sourdough tweet without those words.
+  Matches must score at least 0.3 and be within 0.15 of the best match, since how high
+  scores run depends on the query.
+
+Keyword results appear immediately; meaning results join a moment later. The two
+rankings are merged with reciprocal rank fusion, so a like near the top of both comes
+first. Matched words are highlighted, and a like found only by meaning is labeled
+**Similar meaning**. While searching, the order defaults to **Best match**; newest,
+oldest and shuffled still work, and year, month and author filters apply to both kinds
+of result. **Random** with a search shows the same likes.
+
+**Related** on any tweet lists up to twelve likes closest to it in meaning. A tweet's
+page (`/app/tweet/ID`) has **Copy link** and **Copy Org link** for notes. These stable
+links have the form `/knowledge/tweet/TWEET_ID`; Org links look like
+`[[https://YOUR-HOST/knowledge/tweet/123][description]]`. The host must remain stable for
+saved links to keep working. Links contain no access credential; a browser without a
+session is asked to unlock with its private bookmark and then returns to the tweet.
+Addresses from the former Explore page (`/app/explore/…`) redirect to the tweet or search.
 
 The Mini runs a quantized MiniLM embedding model locally through Transformers.js. Model
 weights are downloaded from Hugging Face on first use; tweet text and search queries
 are not sent to an AI provider. The private vector cache and model files live under
 `.service/`. The index checks for archive changes every minute, reuses unchanged vectors,
-and replaces changed/deleted entries. Longer text is split into overlapping chunks.
-During an initial build the explorer shows progress; later rebuilds keep the previous
-index available until the replacement is ready. Failed builds retry automatically.
+and replaces changed/deleted entries. Links are left out of the text it compares, and
+longer text is split into overlapping chunks. Rebuilds keep the previous index available
+until the replacement is ready, and failed builds retry automatically.
 
-This first version indexes available text, quoted text, and article previews. It does not
-perform image OCR, video transcription, or full-article text extraction. The model is
-primarily suited to English. Similarity and topic assignments may be imperfect.
+The index covers tweet text, quoted text, and article previews. It does not perform image
+OCR, video transcription, or full-article text extraction. The model is primarily suited
+to English, and is weaker on names and specific terms than on general topics; keyword
+matching covers those.
 
 For a local feature-branch preview, run `node service/preview-knowledge.mjs` and open the
 bookmark saved in `.service/knowledge-preview/private-link.txt`. This uses the local

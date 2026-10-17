@@ -1,5 +1,6 @@
 import Tweet from '../components/Tweet.jsx';
 import RelatedPanel from '../components/RelatedPanel.jsx';
+import CopyLinks from '../components/CopyLinks.jsx';
 import { BackIcon } from '../components/Icons.jsx';
 import { navigate, goBack } from '../router.js';
 
@@ -13,7 +14,7 @@ export function PageBar({ title, back = '/app/' }) {
   );
 }
 
-export default function TweetPage({ id, tweets, byId, error, wide, onRemove }) {
+export default function TweetPage({ id, tweets, byId, error, wide, onRemove, notify }) {
   const tweet = byId.get(id);
   const openTweet = next => navigate('/app/tweet/' + next);
   const related = tweet && <RelatedPanel id={id} byId={byId} mode={wide ? 'sidebar' : 'inline'} onRelated={openTweet} onRemove={onRemove} />;
@@ -21,7 +22,7 @@ export default function TweetPage({ id, tweets, byId, error, wide, onRemove }) {
     <>
       <main className="timeline">
         <PageBar title="Tweet" />
-        {tweet && <Tweet tweet={tweet} full onRemove={onRemove} />}
+        {tweet && <Tweet tweet={tweet} full onRemove={onRemove}><CopyLinks tweet={tweet} notify={notify} /></Tweet>}
         {!tweet && <p className="empty">{tweets ? 'This tweet is not in your archive.' : error || 'Loading…'}</p>}
         {!wide && related}
       </main>
