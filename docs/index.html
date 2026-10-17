@@ -114,6 +114,16 @@ details + details { margin-top: 10px; }
 summary { cursor: pointer; font-weight: 600; }
 details p { margin: 10px 0 0; color: var(--muted); }
 
+.shot { margin: 0; }
+.shot img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 40px rgba(15, 20, 25, 0.12); background: var(--bg); }
+.shot figcaption { color: var(--muted); font-size: 15px; margin-top: 10px; }
+.shot figcaption b { color: var(--text); font-weight: 600; }
+.hero-shot { margin-top: 48px; }
+.tour-desktop { display: grid; grid-template-columns: 3fr 2fr; gap: 24px; align-items: start; }
+.phones { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-top: 36px; }
+.phones .shot img { border-radius: 22px; }
+@media (max-width: 860px) { .tour-desktop { grid-template-columns: 1fr; } .phones { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tour-note { color: var(--muted); font-size: 14px; margin: 28px 0 0; }
 footer { border-top: 1px solid var(--border); padding: 32px 0 48px; color: var(--muted); font-size: 15px; }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; }
 @media (max-width: 480px) { .wrap { padding: 0 16px; } .hero { padding: 48px 0 40px; } }
@@ -124,6 +134,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
 <nav class="top">
   <div class="wrap">
     <a class="brand" href="#">Likes Archiver</a>
+    <a class="link opt" href="#tour">Tour</a>
     <a class="link opt" href="#features">Features</a>
     <a class="link opt" href="#how">How it works</a>
     <a class="link" href="#install">Install</a>
@@ -141,8 +152,48 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
       <a class="btn" href="comic.html">Read the comic</a>
       <a class="btn" href="https://github.com/erikseppanen/twitter-scraper">View the code</a>
     </div>
+    <figure class="shot hero-shot">
+      <img src="screenshots/likes-related.png" width="2880" height="1800" alt="The Likes timeline with a photo tweet about the Moon and Jupiter, and a Related sidebar listing other astronomy likes.">
+      <figcaption><b>Likes</b> with the <b>Related</b> sidebar open: other likes about the night sky, matched by meaning.</figcaption>
+    </figure>
   </div>
 </header>
+
+<section id="tour">
+  <div class="wrap">
+    <h2>A quick tour</h2>
+    <p class="intro">The app works the same on a laptop and a phone, in light or dark mode.</p>
+    <div class="tour-desktop">
+      <figure class="shot">
+        <img src="screenshots/explore.png" width="2880" height="1800" alt="Explore page: a graph centered on a tweet about refactoring code with AI, connected to other AI and programming likes." loading="lazy">
+        <figcaption><b>Explore</b> draws a tweet's neighborhood of related likes. Select a circle to follow it, or search by meaning on the right.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="screenshots/updates.png" width="2560" height="960" alt="Updates page showing 'Up to date. 3 new likes saved.' with the last and next check times, and Update now, Reconnect X and Finish sign-in buttons." loading="lazy">
+        <figcaption><b>Updates</b> shows the last result and when the next check runs. Update now, and reconnect X if it signs you out.</figcaption>
+      </figure>
+    </div>
+    <div class="phones">
+      <figure class="shot">
+        <img src="screenshots/phone-likes-dark.png" width="780" height="1688" alt="Likes timeline on a phone in dark mode, with search, filters and a tab bar." loading="lazy">
+        <figcaption><b>Likes</b> on a phone, in dark mode.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="screenshots/phone-related.png" width="780" height="1688" alt="Related likes for a sourdough tweet, full screen on a phone: other bread and dough tweets." loading="lazy">
+        <figcaption><b>Related</b> fills the screen on a phone.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="screenshots/phone-translated.png" width="780" height="1688" alt="Two Spanish tweets shown in English with 'Translated from Spanish · Show original'." loading="lazy">
+        <figcaption><b>Translation</b> into English, with the original one tap away.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="screenshots/phone-random.png" width="780" height="1688" alt="Random page in dark mode showing one tweet with Previous, Next and Reshuffle buttons." loading="lazy">
+        <figcaption><b>Random</b>, one like at a time. Swipe for the next.</figcaption>
+      </figure>
+    </div>
+    <p class="tour-note">Screenshots use a made-up archive with fictional accounts. They're generated from the real app by <code>npm --prefix service run screenshots</code>.</p>
+  </div>
+</section>
 
 <section id="why">
   <div class="wrap two">

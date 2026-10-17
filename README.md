@@ -43,6 +43,7 @@ npm ci --prefix web
 npm run build --prefix web            # the server serves web/dist at /app/
 npm test --prefix web                 # filtering, sorting, shuffling and text formatting
 npm --prefix service run test:web     # builds, then checks the app in Chrome
+npm --prefix service run screenshots  # regenerates docs/screenshots from a made-up archive
 ```
 
 For live reloading, start `node service/preview-knowledge.mjs`, open its private bookmark
