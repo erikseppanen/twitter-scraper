@@ -43,7 +43,7 @@ For configuration and token rotation, see [service operations](service/README.md
   page with related likes.
 - Select an article card to read the article in the app, with its images.
 - **Related** shows similar likes: in a sidebar on wide screens, full screen on phones.
-- **Explore** searches by meaning and shows a graph of related ideas, with **Copy link**
+- **Explore** searches by meaning and lists related ideas for a tweet, with **Copy link**
   and **Copy Org link** for notes.
 - Non-English text appears in English; select the note above it to see the original.
 - Use the half-circle in the menu for light or dark mode.

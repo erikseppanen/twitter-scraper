@@ -141,10 +141,7 @@ export async function createApp({ root, stateDir, publicOrigin, workerFactory, s
         const graph = removed.has(id) ? null : knowledge.graph(id);
         if (!graph) return reply(404, { error: 'Tweet not found in the semantic index.' });
         // The index drops removed tweets on its next refresh; hide them until then.
-        if (removed.size) {
-          graph.nodes = graph.nodes.filter(n => !removed.has(n.tweet.tweetId));
-          graph.edges = graph.edges.filter(e => !removed.has(e.source) && !removed.has(e.target));
-        }
+        if (removed.size) graph.nodes = graph.nodes.filter(n => !removed.has(n.tweet.tweetId));
         return reply(200, graph);
       }
       if (req.method === 'GET' && url.pathname === '/api/status') return reply(200, { ...state, busy: worker.busy });

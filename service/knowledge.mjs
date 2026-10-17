@@ -117,12 +117,6 @@ export class KnowledgeIndex {
     const center = this.rows[index];
     const neighbors = this.rank(this.vectors[index], { exclude: id, limit: 12 }).filter(r => r.score > 0.15);
     const nodes = [{ tweet: center, score: 1 }, ...neighbors];
-    const edges = neighbors.map(r => ({ source: id, target: r.tweet.tweetId, score: r.score }));
-    const positions = new Map(this.rows.map((t, i) => [t.tweetId, i]));
-    for (let a = 1; a < nodes.length; a++) for (let b = a + 1; b < nodes.length; b++) {
-      const score = cosine(this.vectors[positions.get(nodes[a].tweet.tweetId)], this.vectors[positions.get(nodes[b].tweet.tweetId)]);
-      if (score > 0.5) edges.push({ source: nodes[a].tweet.tweetId, target: nodes[b].tweet.tweetId, score });
-    }
-    return { center: id, nodes, edges, neighborhood: describeNeighborhood(nodes) };
+    return { center: id, nodes, neighborhood: describeNeighborhood(nodes) };
   }
 }

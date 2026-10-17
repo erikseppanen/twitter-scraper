@@ -40,7 +40,7 @@ try {
   assert.ok(page.url().includes('?next='));
   await page.goto(origin + '/#' + config.token);
   await page.waitForURL('**/app/explore/tweet/1');
-  await page.locator('.graph .node').first().waitFor();
+  await page.locator('.timeline .tweet:not(.full)').first().waitFor();
   assert.notEqual(await page.locator('.neighborhood h2').innerText(), '');
   assert.ok(await page.locator('.neighborhood .badge').count() > 0);
   assert.match(await page.locator('.timeline .tweet.full .text').innerText(), /Neural networks/);
@@ -49,7 +49,7 @@ try {
   assert.match(copied, /^\[\[http:\/\/127\.0\.0\.1:14329\/knowledge\/tweet\/1\]\[@example: Neural networks/);
   assert.ok(!copied.includes(config.token));
   // The closest neighbor comes first; following it and going back works.
-  await page.locator('.graph .node:not(.center)').first().click();
+  await page.locator('.timeline .tweet:not(.full)').first().getByRole('button', { name: 'Related' }).click();
   await page.waitForURL('**/app/explore/tweet/2');
   await page.goBack();
   await page.waitForURL('**/app/explore/tweet/1');
@@ -60,7 +60,7 @@ try {
   await page.locator('.section-title', { hasText: 'Related by meaning' }).waitFor();
   assert.match(await page.locator('.timeline .tweet .text').first().innerText(), /bread|loaves/);
   await page.locator('.timeline .tweet').first().getByRole('button', { name: 'Related' }).click();
-  await page.locator('.graph .node').first().waitFor();
+  await page.locator('.timeline .tweet:not(.full)').first().waitFor();
   assert.match(await page.locator('.timeline .tweet.full .text').innerText(), /bread|loaves/);
   await page.screenshot({ path: '.service/knowledge-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -72,5 +72,5 @@ try {
   await page.locator('.related .tweet').first().waitFor();
   assert.equal(await page.locator('.related #tweet-1').count(), 0);
   assert.deepEqual(errors, []);
-  console.log('PASS: saved links unlock into Explore, Org clipboard, graph navigation, back, semantic search, mobile layout, permalinks.');
+  console.log('PASS: saved links unlock into Explore, Org clipboard, Related ideas navigation, back, semantic search, mobile layout, permalinks.');
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true }); }

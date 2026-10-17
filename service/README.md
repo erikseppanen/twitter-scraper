@@ -3,8 +3,8 @@
 Runs the existing Clojure importer from a Node service, with a React app at `/app/` and a
 dedicated Chrome profile.
 Updates run every four hours, with an Update now button. Scraping does not require an LLM.
-The knowledge explorer uses a small local embedding model for semantic search and graph
-neighbors. It downloads model weights on first use and keeps tweet text on this machine.
+The knowledge explorer uses a small local embedding model for semantic search and related
+tweets. It downloads model weights on first use and keeps tweet text on this machine.
 
 ## Mac Mini installation
 
@@ -98,7 +98,7 @@ symlink escapes, video ranges, deduplication, and preserving state when browser 
 Live X collection and restart testing require the deployed Mini and a signed-in X session.
 
 The knowledge browser test uses synthetic posts and the real embedding model to verify
-semantic ranking, authentication return, Org links, graph navigation, and mobile layout.
+semantic ranking, authentication return, Org links, Related ideas navigation, and mobile layout.
 First use requires access to Hugging Face to download model weights. Model and vector
 caches are private files under `.service/`; do not commit them. The index refreshes every
 minute independently of the four-hour collection schedule. All knowledge APIs/assets

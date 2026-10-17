@@ -31,7 +31,6 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const wide = useMedia('(min-width: 1100px)');
-  const compact = useMedia('(max-width: 599px)');
 
   useEffect(() => {
     getJSON('/archive/tweets.json').then(setTweets, e => setError(e.message || 'The archive could not be loaded.'));
@@ -66,7 +65,7 @@ export default function App() {
     }
   }
 
-  const shared = { tweets, byId, error, wide, compact, notify, onRemove: setRemoving };
+  const shared = { tweets, byId, error, wide, notify, onRemove: setRemoving };
   // Each navigation remounts the page so it reads its state from the new address.
   let page;
   if (route.page === 'tweet') page = <TweetPage key={navigation} id={route.id} {...shared} />;

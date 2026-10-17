@@ -149,7 +149,7 @@ try {
   }
 
   await shoot('likes-related', { width: 1440, height: 900, url: '/app/?related=1000000000000000021', ready: '.related .tweet' });
-  await shoot('explore', { width: 1440, height: 900, url: '/app/explore/tweet/1000000000000000019', ready: '.graph .node' });
+  await shoot('explore', { width: 1440, height: 900, url: '/app/explore/tweet/1000000000000000019', ready: '.timeline .tweet:not(.full)' });
   await shoot('updates', { width: 1280, height: 480, url: '/app/updates', ready: '.status-card .secondary' });
   await shoot('phone-likes-dark', { width: 390, height: 844, scheme: 'dark', url: '/app/', ready: '.timeline .tweet' });
   await shoot('phone-translated', { width: 390, height: 844, url: '/app/?author=inesobserva', ready: '.tweet',

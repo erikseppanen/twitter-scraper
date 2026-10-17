@@ -44,7 +44,7 @@ const knowledge = { rows: tweets, summary: () => ({ state: 'ready', message: 'Se
   search: async (q, topic) => { searches.push([q, topic]); return tweets.filter(t => !q || t.text.includes(q)).slice(0, 5).map(tweet => ({ tweet: { ...tweet, topic: 'Science' }, score: q ? 0.5 : null })); },
   graph: id => { const i = tweets.findIndex(t => t.tweetId === id); if (i < 0) return null;
     const nodes = [i, i + 1, i + 2].map((n, k) => ({ tweet: { ...tweets[n % tweets.length], topic: 'Science' }, score: k ? 0.6 : 1 }));
-    return { center: id, nodes, edges: nodes.slice(1).map(n => ({ source: id, target: n.tweet.tweetId, score: 0.6 })), neighborhood: { title: 'Rockets and bread', themes: ['Science'] } }; } };
+    return { center: id, nodes, neighborhood: { title: 'Rockets and bread', themes: ['Science'] } }; } };
 const translations = new Translations(root, path.join(root, '.service'), async () => { await new Promise(r => setTimeout(r, 800)); return 'Translated sentence.'; });
 let purges = 0; const actions = [];
 const { server, config } = await createApp({ root, stateDir: path.join(root, '.service'), publicOrigin: origin, schedule: false, knowledgeIndex: knowledge, translations,
@@ -217,13 +217,13 @@ try {
   await page.waitForURL(origin + '/app/explore/tweet/' + resultId + '?q=rockets');
   await page.locator('.neighborhood h2', { hasText: 'Rockets and bread' }).waitFor();
   // Neighbors are 1002 and 1003; 1003 was removed above, so the server leaves it out.
-  assert.equal(await page.locator('.graph .node').count(), 2);
+  assert.equal(await page.locator('.timeline .tweet:not(.full)').count(), 1);
   assert.equal(await page.locator('.explore-sidebar .result').count(), 4); // five matches minus removed 1003
   await page.getByRole('button', { name: 'Copy Org link' }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   assert.ok(copied.startsWith(`[[${origin}/knowledge/tweet/${resultId}][@`), copied);
   assert.ok(!copied.includes(config.token));
-  await page.locator('.graph .node:not(.center)').first().click();
+  await page.locator('.timeline .tweet:not(.full)').first().getByRole('button', { name: 'Related' }).click();
   await page.waitForURL(url => url.pathname !== '/app/explore/tweet/' + resultId && url.pathname.startsWith('/app/explore/tweet/'));
   await page.locator('.page-bar').getByRole('link', { name: 'Back' }).click();
   await page.waitForURL(origin + '/app/explore/tweet/' + resultId + '?q=rockets');
@@ -316,11 +316,11 @@ try {
   await page.locator('.related-overlay .tweet').first().waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.related-overlay').count(), 0);
-  // The navigation becomes a bottom tab bar, and Explore's graph fits the screen.
+  // The navigation becomes a bottom tab bar, and Explore fits the screen.
   const bar = await page.locator('.nav').boundingBox();
   assert.ok(bar.y + bar.height >= 840 && bar.width >= 380, JSON.stringify(bar));
   await page.goto(origin + '/app/explore/tweet/1005');
-  await page.locator('.graph .node').first().waitFor();
+  await page.locator('.timeline .tweet:not(.full)').first().waitFor();
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   assert.deepEqual(errors, []);
   console.log('PASS: React app timeline, articles, shuffle, Random, related, translation, removal, tweet pages, Explore, Updates and phone layout.');

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import Tweet from '../components/Tweet.jsx';
-import Graph from '../components/Graph.jsx';
 import CopyLinks from '../components/CopyLinks.jsx';
 import { PageBar } from './TweetPage.jsx';
 import { getJSON } from '../api.js';
@@ -41,11 +40,11 @@ function ResultRow({ row, selected, onOpen }) {
   );
 }
 
-export default function Explore({ id, tweets, byId, wide, compact, onRemove, notify }) {
+export default function Explore({ id, tweets, byId, wide, onRemove, notify }) {
   const [{ q, topic }, setSearch] = useState(readLocation);
   const [draft, setDraft] = useState(q);
   const [results, setResults] = useState({ key: null, rows: [], message: '' });
-  const [graph, setGraph] = useState({ id: null, data: null, message: '' });
+  const [related, setRelated] = useState({ id: null, data: null, message: '' });
   const status = useIndexStatus();
   const ready = status?.available > 0;
   const suffix = new URLSearchParams(Object.entries({ q, topic }).filter(([, v]) => v)).toString();
@@ -68,10 +67,10 @@ export default function Explore({ id, tweets, byId, wide, compact, onRemove, not
   useEffect(() => {
     if (!id || !ready) return;
     let cancelled = false;
-    setGraph({ id, data: null, message: 'Finding related ideas…' });
+    setRelated({ id, data: null, message: 'Finding related ideas…' });
     getJSON('/api/knowledge/graph?id=' + encodeURIComponent(id)).then(
-      data => { if (!cancelled) setGraph({ id, data, message: '' }); },
-      e => { if (!cancelled) setGraph({ id, data: null, message: e.status === 404 ? 'This tweet is not in the index yet.' : e.message }); },
+      data => { if (!cancelled) setRelated({ id, data, message: '' }); },
+      e => { if (!cancelled) setRelated({ id, data: null, message: e.status === 404 ? 'This tweet is not in the index yet.' : e.message }); },
     );
     return () => { cancelled = true; };
   }, [id, ready]);
@@ -101,7 +100,7 @@ export default function Explore({ id, tweets, byId, wide, compact, onRemove, not
   let main;
   if (id) {
     const tweet = byId.get(id);
-    const data = graph.id === id ? graph.data : null;
+    const data = related.id === id ? related.data : null;
     const center = data?.nodes[0]?.tweet;
     main = (
       <>
@@ -111,11 +110,9 @@ export default function Explore({ id, tweets, byId, wide, compact, onRemove, not
             <span className="secondary small">Semantic neighborhood</span>
             <h2>{data.neighborhood?.title || 'Connected ideas'}</h2>
             {!!data.neighborhood?.themes?.length && <div className="badges">{data.neighborhood.themes.map(theme => <span key={theme} className="badge">{theme}</span>)}</div>}
-            <Graph data={data} onSelect={open} compact={compact} />
-            <p className="secondary small">Select a circle to follow its connections. Thicker lines mean more similar.</p>
           </section>
         )}
-        {(graph.message || !ready) && <p className="empty" role="status">{ready ? graph.message : describeStatus(status)}</p>}
+        {(related.message || !ready) && <p className="empty" role="status">{ready ? related.message : describeStatus(status)}</p>}
         {tweet && (
           <Tweet tweet={tweet} full onRelated={open} onRemove={onRemove}>
             {center?.topic && <span className="badge topic">{center.topic}</span>}

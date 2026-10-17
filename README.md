@@ -62,9 +62,10 @@ adds:
   returned to the requested tweet in the same tab.
 - Search by meaning, including quoted text and article titles/previews. A query can
   match a related idea without sharing its exact words.
-- A graph centered on a selected tweet and up to twelve semantic neighbors. Click a
-  node to explore its neighborhood, use the related-ideas list or keyboard navigation,
-  and drag to pan or choose **Fit graph**. Edges represent model similarity, not citations.
+- A page for a selected tweet with a short label for its neighborhood, a few shared
+  themes, and up to twelve semantically similar likes under **Related ideas**. Choose
+  **Related** on any of them to move to its neighborhood. Similarity comes from the
+  model, not from links or replies.
 - Suggested topic filters. These are approximate classifications from a fixed topic
   list, not manually curated categories or factual judgments.
 
