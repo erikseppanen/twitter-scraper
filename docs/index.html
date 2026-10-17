@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Twitter Likes Archiver</title>
+<meta name="description" content="Keep a private, searchable copy of your X (Twitter) likes, with media and articles, on a Mac you own. Updates itself every four hours.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #ffffff;
+  --surface: #f5f7fa;
+  --border: #e1e5eb;
+  --text: #0f1419;
+  --muted: #536471;
+  --accent: #1d9bf0;
+  --accent-ink: #ffffff;
+  --code-bg: #0f1419;
+  --code-text: #e7e9ea;
+  --warn-bg: #fff7e0;
+  --warn-border: #f2c94c;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000; --surface: #16181c; --border: #2f3336; --text: #e7e9ea; --muted: #8b98a5;
+    --accent: #1d9bf0; --code-bg: #16181c; --code-text: #e7e9ea; --warn-bg: #241e0c; --warn-border: #7a6312;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 var(--sans); }
+a { color: var(--accent); }
+code { font-family: var(--mono); font-size: 0.9em; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+pre { margin: 12px 0 0; background: var(--code-bg); color: var(--code-text); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 14px/1.55 var(--mono); }
+pre code { background: none; border: 0; padding: 0; font-size: inherit; color: inherit; }
+pre .c { color: #8b98a5; }
+
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+nav.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+nav.top .wrap { display: flex; align-items: center; gap: 20px; height: 56px; }
+nav.top .brand { font-weight: 700; color: var(--text); text-decoration: none; margin-right: auto; white-space: nowrap; }
+nav.top a.link { color: var(--muted); text-decoration: none; font-size: 15px; font-weight: 500; }
+nav.top a.link:hover { color: var(--text); }
+@media (max-width: 720px) { nav.top a.link.opt { display: none; } }
+
+.hero { padding: 72px 0 56px; }
+.hero h1 { font-size: clamp(36px, 6vw, 60px); line-height: 1.05; letter-spacing: -0.02em; margin: 0 0 18px; max-width: 16ch; text-wrap: balance; }
+.hero p.lead { font-size: 20px; color: var(--muted); max-width: 60ch; margin: 0 0 28px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn { display: inline-block; padding: 11px 20px; border-radius: 999px; font-weight: 600; text-decoration: none; border: 1px solid var(--border); color: var(--text); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:hover { filter: brightness(0.95); }
+
+section { padding: 56px 0; border-top: 1px solid var(--border); }
+section h2 { font-size: 32px; letter-spacing: -0.01em; margin: 0 0 8px; }
+section .intro { color: var(--muted); max-width: 65ch; margin: 0 0 28px; }
+h3 { font-size: 19px; margin: 0 0 6px; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+.card p { margin: 0; color: var(--muted); font-size: 16px; }
+.card .icon { font-size: 22px; line-height: 1; margin-bottom: 10px; }
+
+.diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; overflow-x: auto; }
+.diagram svg { display: block; width: 100%; min-width: 640px; height: auto; }
+.diagram .box { fill: var(--bg); stroke: var(--border); stroke-width: 1.5; }
+.diagram .box.hi { stroke: var(--accent); }
+.diagram text { fill: var(--text); font: 500 14px var(--sans); }
+.diagram text.sub { fill: var(--muted); font: 400 12px var(--sans); }
+.diagram .arrow { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#arrowhead); }
+.diagram .group { fill: none; stroke: var(--muted); stroke-dasharray: 5 5; stroke-width: 1; }
+.diagram #arrowhead path { fill: var(--muted); }
+.steps-flow { margin: 24px 0 0; padding-left: 22px; display: grid; gap: 8px; max-width: 75ch; }
+
+.comic-promo { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; background: #ffe14d; color: #1d1a2b; border: 3px solid #1d1a2b; box-shadow: 6px 6px 0 #1d1a2b; border-radius: 4px; padding: 24px 28px; margin-top: 32px; }
+.comic-promo h3 { font-size: 22px; }
+.comic-promo p { margin: 0; }
+.comic-promo a { background: #e8483b; color: #fff; border: 3px solid #1d1a2b; padding: 10px 18px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+@media (max-width: 640px) { .comic-promo { grid-template-columns: 1fr; } }
+
+.reqs { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px 28px; margin: 0; padding: 0; list-style: none; }
+.reqs li { padding-left: 26px; position: relative; }
+.reqs li::before { content: '✓'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+.reqs li span { display: block; color: var(--muted); font-size: 15px; }
+
+ol.install { counter-reset: step; list-style: none; margin: 0; padding: 0; display: grid; gap: 28px; }
+ol.install > li { counter-increment: step; position: relative; min-width: 0; padding-left: 52px; }
+ol.install > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; }
+ol.install p { margin: 4px 0 0; color: var(--muted); max-width: 75ch; }
+
+.callout { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 12px; padding: 16px 20px; margin-top: 24px; }
+.callout p { margin: 0; }
+.callout p + p { margin-top: 8px; }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+ul.plain li { color: var(--muted); }
+ul.plain li b { color: var(--text); font-weight: 600; }
+
+table { width: 100%; border-collapse: collapse; font-size: 16px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 14px; }
+td:first-child { white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+
+details { border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; background: var(--surface); }
+details + details { margin-top: 10px; }
+summary { cursor: pointer; font-weight: 600; }
+details p { margin: 10px 0 0; color: var(--muted); }
+
+footer { border-top: 1px solid var(--border); padding: 32px 0 48px; color: var(--muted); font-size: 15px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; }
+@media (max-width: 480px) { .wrap { padding: 0 16px; } .hero { padding: 48px 0 40px; } }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <a class="brand" href="#">Likes Archiver</a>
+    <a class="link opt" href="#features">Features</a>
+    <a class="link opt" href="#how">How it works</a>
+    <a class="link" href="#install">Install</a>
+    <a class="link" href="comic.html">Comic</a>
+    <a class="link" href="https://github.com/erikseppanen/twitter-scraper">GitHub</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Your X likes, saved on a Mac you own.</h1>
+    <p class="lead">A private, searchable archive of everything you've liked on X (Twitter), including the photos, videos and long articles. It updates itself every four hours on an always-on Mac, and you browse it from your phone or laptop through a private link.</p>
+    <div class="buttons">
+      <a class="btn primary" href="#install">Set it up</a>
+      <a class="btn" href="comic.html">Read the comic</a>
+      <a class="btn" href="https://github.com/erikseppanen/twitter-scraper">View the code</a>
+    </div>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap two">
+    <div>
+      <h2>Why keep your own copy?</h2>
+      <p class="intro">Likes are a good record of what caught your attention, but X only gives you an endless scroll. Tweets get deleted, accounts go private, and images disappear. Search across your own likes is limited.</p>
+    </div>
+    <ul class="plain">
+      <li><b>It's yours.</b> Tweets, media and articles are plain files on your Mac. No database and no cloud service.</li>
+      <li><b>It keeps going.</b> A background service checks for new likes every four hours. You don't run anything by hand.</li>
+      <li><b>It's private.</b> Only someone with your private link can open the archive. Search, related tweets and translation run on your Mac, not on an AI service.</li>
+      <li><b>No API key.</b> It uses your own X sign-in in a separate Chrome profile, plus public tweet-content endpoints.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>What you get</h2>
+    <p class="intro">A web app laid out like X, with Likes, Explore, Random and Updates in the menu (or a tab bar on phones).</p>
+    <div class="cards">
+      <div class="card"><div class="icon">🔎</div><h3>Search and filter</h3><p>Search text, authors and article titles. Filter by year, month or author. Sort newest, oldest or shuffled. Your filters stay in the address, so links keep them.</p></div>
+      <div class="card"><div class="icon">🖼️</div><h3>Media and articles saved</h3><p>Photos, videos and GIFs are downloaded. X articles open in the app with their formatting and images. Quoted tweets come along too.</p></div>
+      <div class="card"><div class="icon">🧭</div><h3>Related and Explore</h3><p>Find likes with a similar meaning, even without shared words. Explore shows a graph of connected ideas, with stable links you can paste into notes.</p></div>
+      <div class="card"><div class="icon">🌐</div><h3>Translation</h3><p>Non-English tweets are shown in English, translated on your Mac. One tap shows the original.</p></div>
+      <div class="card"><div class="icon">🎲</div><h3>Random</h3><p>Rediscover old likes one at a time. Swipe or use the arrow keys.</p></div>
+      <div class="card"><div class="icon">🗑️</div><h3>Remove</h3><p>Delete a tweet and its media from the archive. Removed tweets are never imported again.</p></div>
+      <div class="card"><div class="icon">🔄</div><h3>Update now</h3><p>The Updates page shows the last result and has a button to check right away. If X signs you out, you reconnect from there too.</p></div>
+      <div class="card"><div class="icon">📦</div><h3>Import your history</h3><p>Load older likes (and optionally your retweets) from X's downloadable data export.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="intro">One Mac stays on and does everything. Your other devices only view.</p>
+    <div class="diagram" role="img" aria-label="Diagram: every four hours a Node service on the Mac opens a dedicated Chrome profile, reads new likes from X, and hands them to a Clojure importer that downloads content and media into a staged archive. Your phone reaches the service through a Tailscale HTTPS address with a private link.">
+      <svg viewBox="0 0 960 330" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z"/></marker>
+        </defs>
+        <rect class="group" x="200" y="12" width="748" height="306" rx="14"/>
+        <text class="sub" x="216" y="34">Your always-on Mac (Apple Silicon)</text>
+
+        <rect class="box" x="12" y="60" width="160" height="64" rx="10"/>
+        <text x="28" y="88">X (Twitter)</text>
+        <text class="sub" x="28" y="108">your Likes page</text>
+
+        <rect class="box" x="236" y="60" width="180" height="64" rx="10"/>
+        <text x="252" y="88">Dedicated Chrome</text>
+        <text class="sub" x="252" y="108">its own profile, signed in</text>
+
+        <rect class="box hi" x="236" y="200" width="180" height="76" rx="10"/>
+        <text x="252" y="228">Node service</text>
+        <text class="sub" x="252" y="248">schedule · web app · access</text>
+        <text class="sub" x="252" y="266">related · translation</text>
+
+        <rect class="box" x="480" y="60" width="200" height="64" rx="10"/>
+        <text x="496" y="88">Clojure importer</text>
+        <text class="sub" x="496" y="108">fetches text, media, articles</text>
+
+        <rect class="box" x="744" y="60" width="188" height="64" rx="10"/>
+        <text x="760" y="88">archive-staging/</text>
+        <text class="sub" x="760" y="108">a copy, checked first</text>
+
+        <rect class="box hi" x="744" y="200" width="188" height="76" rx="10"/>
+        <text x="760" y="228">archive/</text>
+        <text class="sub" x="760" y="248">tweets, media, articles</text>
+        <text class="sub" x="760" y="266">plain files</text>
+
+        <rect class="box" x="12" y="200" width="160" height="76" rx="10"/>
+        <text x="28" y="228">Your phone</text>
+        <text class="sub" x="28" y="248">private link via</text>
+        <text class="sub" x="28" y="266">Tailscale HTTPS</text>
+
+        <path class="arrow" d="M326 200 V128"/>
+        <text class="sub" x="334" y="168">every 4 hours</text>
+        <path class="arrow" d="M236 92 H176"/>
+        <text class="sub" x="182" y="84">reads</text>
+        <path class="arrow" d="M416 92 H476"/>
+        <text class="sub" x="424" y="84">IDs</text>
+        <path class="arrow" d="M680 92 H740"/>
+        <path class="arrow" d="M838 124 V196"/>
+        <text class="sub" x="846" y="166">swap in</text>
+        <path class="arrow" d="M744 238 H420"/>
+        <text class="sub" x="540" y="230">serves</text>
+        <path class="arrow" d="M172 238 H232"/>
+      </svg>
+    </div>
+    <ol class="steps-flow">
+      <li>Every four hours, or when you tap <b>Update now</b>, the Node service opens Chrome in the background with its own profile, where you signed into X once.</li>
+      <li>It scrolls your Likes page until it reaches the last like it saw. It goes by the order you liked things, so a 2015 tweet you liked today still counts as new.</li>
+      <li>The Clojure importer fetches each tweet's text, quoted tweet, article and media into a <em>copy</em> of the archive.</li>
+      <li>If every new tweet has content, the copy replaces the live archive, and the old version is kept for rollback. If anything is wrong, the live archive stays as it was.</li>
+      <li>Your phone opens the app through a Tailscale HTTPS address. A private bookmark signs it in.</li>
+    </ol>
+    <div class="comic-promo">
+      <div>
+        <h3>Prefer pictures?</h3>
+        <p>The comic walks through the whole system in a dozen panels, from Homebrew to backups, and every panel names the real file or command.</p>
+      </div>
+      <a href="comic.html">Read the comic →</a>
+    </div>
+  </div>
+</section>
+
+<section id="requirements">
+  <div class="wrap">
+    <h2>What you need</h2>
+    <p class="intro">This is a self-hosted tool for people comfortable with a terminal. Setup takes an hour or so. After that you shouldn't need the terminal.</p>
+    <ul class="reqs">
+      <li>A Mac with Apple Silicon that stays on<span>A Mac Mini is ideal. The service runs while you're logged into macOS. Staging uses APFS copy-on-write, so Linux isn't supported.</span></li>
+      <li>An X account<span>You sign in once in a dedicated Chrome window. Your normal browser isn't touched.</span></li>
+      <li>Homebrew<span>For Node.js, Java 21, the Clojure CLI, Python 3 and Google Chrome.</span></li>
+      <li>Tailscale<span>Gives the Mac an HTTPS address. Use Serve for tailnet-only access, or Funnel to view from any device.</span></li>
+      <li>Disk space for media<span>Videos add up. A few thousand likes with media can take several gigabytes.</span></li>
+      <li>Optional: your X data export<span>To import likes from before the first automatic update.</span></li>
+    </ul>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="intro">Run these on the Mac that will host the archive. The full guide, with upgrade and recovery details, is in <a href="https://github.com/erikseppanen/twitter-scraper/blob/main/service/README.md">service/README.md</a>.</p>
+    <ol class="install">
+      <li>
+        <h3>Install the tools</h3>
+        <p>Java 21 from Homebrew isn't on your <code>PATH</code>, so typing <code>java</code> won't find it. That's expected; the service points to it directly.</p>
+<pre><code>brew install node openjdk@21 clojure/tools/clojure python
+brew install --cask google-chrome</code></pre>
+        <p>Install <a href="https://tailscale.com/download/mac">Tailscale</a> and sign in.</p>
+      </li>
+      <li>
+        <h3>Get the code</h3>
+<pre><code>git clone https://github.com/erikseppanen/twitter-scraper.git ~/twitter-scraper
+cd ~/twitter-scraper</code></pre>
+      </li>
+      <li>
+        <h3>Give the Mac an HTTPS address</h3>
+        <p>The service only listens on <code>127.0.0.1:4318</code>. Tailscale puts HTTPS in front of it. Pick one:</p>
+<pre><code><span class="c"># Only your own devices running Tailscale can reach it</span>
+tailscale serve --bg http://127.0.0.1:4318
+
+<span class="c"># Or reachable from any device (still needs the private link to get in)</span>
+tailscale funnel --bg --https=8443 http://127.0.0.1:4318</code></pre>
+      </li>
+      <li>
+        <h3>Run the installer</h3>
+        <p>Use your Mac's Tailscale address, including the port if you chose 8443. The installer downloads dependencies, runs every test, builds the app and registers a LaunchAgent that starts the service at login and restarts it if it crashes.</p>
+<pre><code>PUBLIC_ORIGIN=https://YOUR-MAC.YOUR-TAILNET.ts.net bash scripts/install-mini.sh</code></pre>
+        <p>It leaves a <b>Twitter Archive</b> bookmark on the desktop. That bookmark is your private link.</p>
+      </li>
+      <li>
+        <h3>Sign into X once</h3>
+        <p>Open the bookmark, go to <b>Updates</b>, choose <b>Reconnect X</b>, sign in in the Chrome window that opens, then choose <b>Finish sign-in</b>. The first update starts on its own.</p>
+      </li>
+      <li>
+        <h3>Optional: import your older likes</h3>
+        <p>Download your data from X, extract it, and import it into a separate folder first. See the <a href="https://github.com/erikseppanen/twitter-scraper/blob/main/TUTORIAL.md#initial-historical-import">tutorial</a> for moving it into place.</p>
+<pre><code>clj -M -m twitter-scraper.core --input ~/twitter-export --output ./archive-repair</code></pre>
+      </li>
+      <li>
+        <h3>Open it on your phone</h3>
+        <p>Send the private link (in <code>.service/private-link.txt</code>) to your phone privately, open it once, and bookmark the app. It signs you in and removes the secret from the address bar.</p>
+      </li>
+    </ol>
+    <div class="callout">
+      <p><b>Treat the private link like a password.</b> Anyone who has it can view your archive and use its controls. There are no separate user accounts. You can replace the secret at any time; see <a href="https://github.com/erikseppanen/twitter-scraper/blob/main/service/README.md#access">Access</a>.</p>
+      <p>Never commit or upload <code>.service/</code>. It holds the secret and your X session.</p>
+    </div>
+  </div>
+</section>
+
+<section id="daily">
+  <div class="wrap two">
+    <div>
+      <h2>Day to day</h2>
+      <p class="intro">Mostly, you just open the bookmark.</p>
+    </div>
+    <ul class="plain">
+      <li><b>Updates are automatic</b> every four hours. Tap <b>Update now</b> on the Updates page if you want them sooner.</li>
+      <li><b>If X signs you out,</b> Updates says so. Choose Reconnect X, sign in on the Mac, then Finish sign-in.</li>
+      <li><b>After a reboot,</b> log into the Mac's macOS account so the service can start.</li>
+      <li><b>Back up all of <code>archive/</code></b>, including its hidden <code>.tweet-cache.edn</code>, <code>media/</code> and <code>articles/</code>. Media whose source is deleted can't be downloaded again.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="data">
+  <div class="wrap">
+    <h2>Where things live</h2>
+    <p class="intro">Everything is plain files in the project folder on the Mac.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Folder</th><th>What it holds</th><th>Back it up?</th></tr></thead>
+        <tbody>
+          <tr><td><code>archive/</code></td><td>Your likes (<code>tweets.json</code>), downloaded media, articles and the metadata cache.</td><td>Yes, all of it</td></tr>
+          <tr><td><code>archive-previous/</code></td><td>The version before the last update, for rollback.</td><td>Not a real backup</td></tr>
+          <tr><td><code>.service/</code></td><td>The private-link secret, X session, schedule and the cutoff, plus rebuildable caches for search and translation.</td><td>Privately, if you want to restore the setup</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="limits">
+  <div class="wrap">
+    <h2>Good to know</h2>
+    <p class="intro">Honest limits, so there are no surprises.</p>
+    <details><summary>Will it get every like I've ever made?</summary><p>Automatic updates collect new likes from where they left off. They aren't a full historical backfill: X's Likes page stops loading eventually. For older likes, import X's data export.</p></details>
+    <details><summary>What happens when X changes its site?</summary><p>Collection reads the Likes page in a real browser, so X page changes, login challenges or rate limits can break an update until the code is fixed. A failed update never touches your existing archive, and Updates shows what went wrong.</p></details>
+    <details><summary>Does anything get sent to an AI service?</summary><p>No. Related tweets and Explore use a small embedding model (MiniLM), and translation uses NLLB. Both run on your Mac. Their weights download from Hugging Face the first time. Matching works best in English.</p></details>
+    <details><summary>Can I run it on Linux, Windows or a server?</summary><p>Not as-is. The installer and the copy-on-write staging target macOS on APFS, and sign-in needs a visible Chrome window.</p></details>
+    <details><summary>Deleted or protected tweets?</summary><p>Tweets that were already gone when the importer reached them can't be recovered. Once a tweet is archived, its text and media stay even if the original is deleted.</p></details>
+    <details><summary>Licenses</summary><p>The project is MIT. The NLLB translation model is CC-BY-NC-4.0 (non-commercial).</p></details>
+  </div>
+</section>
+
+<section id="docs">
+  <div class="wrap">
+    <h2>Read more</h2>
+    <div class="cards">
+      <a class="card" href="comic.html" style="text-decoration:none"><h3>The comic</h3><p>The whole system, in pictures.</p></a>
+      <a class="card" href="https://github.com/erikseppanen/twitter-scraper/blob/main/README.md" style="text-decoration:none"><h3>README</h3><p>Features, architecture, layout and commands.</p></a>
+      <a class="card" href="https://github.com/erikseppanen/twitter-scraper/blob/main/TUTORIAL.md" style="text-decoration:none"><h3>Tutorial</h3><p>Browsing, backups, imports and recovery.</p></a>
+      <a class="card" href="https://github.com/erikseppanen/twitter-scraper/blob/main/ARCHITECTURE.md" style="text-decoration:none"><h3>Architecture</h3><p>Deployment, runtime, updates and data, in detail.</p></a>
+      <a class="card" href="https://github.com/erikseppanen/twitter-scraper/blob/main/service/README.md" style="text-decoration:none"><h3>Service guide</h3><p>Installation, access, upgrades and tests.</p></a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Twitter Likes Archiver · MIT license · Not affiliated with X Corp.</span>
+    <a href="https://github.com/erikseppanen/twitter-scraper">github.com/erikseppanen/twitter-scraper</a>
+  </div>
+</footer>
+
+</body>
+</html>

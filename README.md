@@ -5,6 +5,9 @@ uses a dedicated Chrome session to collect new likes, and calls a Clojure import
 content and download media, and serves a private web app for browsing them. No LLM or
 browser extension is required.
 
+New here? Start with the [project website](https://erikseppanen.github.io/twitter-scraper/)
+or [the comic](https://erikseppanen.github.io/twitter-scraper/comic.html).
+
 ## Everyday use
 
 Open your saved private bookmark; it signs you in and opens the archive app. The app

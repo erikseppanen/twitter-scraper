@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A comic about how the Twitter Likes Archiver works.">
+<title>The Likes Archive Comic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Patrick+Hand&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a comic book page. Ink-outlined panels on a halftone sky, read left to right, top to bottom. */
+:root {
+  --ink: #1d1a2b;
+  --paper: #ffffff;
+  --sky: #e6efff;
+  --dots: #c4d6fb;
+  --caption: #ffe14d;
+  --red: #e8483b;
+  --note: #44405a;
+  --display: 'Bangers', 'Impact', 'Arial Black', sans-serif;
+  --hand: 'Patrick Hand', 'Comic Sans MS', 'Chalkboard SE', cursive;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--sky) radial-gradient(var(--dots) 1.6px, transparent 1.8px) 0 0 / 14px 14px;
+  color: var(--ink);
+  font-family: var(--hand);
+  font-size: 18px;
+  line-height: 1.35;
+  padding: 28px 16px 56px;
+}
+.book { max-width: 1060px; margin: 0 auto; display: grid; gap: 28px; }
+header.cover {
+  background: var(--red);
+  color: var(--paper);
+  border: 4px solid var(--ink);
+  box-shadow: 7px 7px 0 var(--ink);
+  padding: 22px 26px 20px;
+  transform: rotate(-0.6deg);
+}
+header.cover h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(40px, 7vw, 76px);
+  letter-spacing: 0.03em;
+  line-height: 0.95;
+  margin: 0;
+  text-wrap: balance;
+  text-shadow: 3px 3px 0 var(--ink);
+}
+header.cover p { margin: 10px 0 0; font-size: 20px; max-width: 62ch; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; }
+@media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel {
+  margin: 0;
+  background: var(--paper);
+  border: 4px solid var(--ink);
+  box-shadow: 6px 6px 0 var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+.cap {
+  background: var(--caption);
+  border-bottom: 4px solid var(--ink);
+  padding: 10px 14px 11px;
+  font-size: 18px;
+}
+.cap b {
+  display: block;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 25px;
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+  margin-bottom: 3px;
+}
+.cap b span { color: var(--red); margin-right: 6px; }
+.panel svg { display: block; width: 100%; height: auto; flex: 1; }
+.panel svg text { font-family: var(--hand); font-size: 15px; fill: var(--ink); }
+.panel svg text.small { font-size: 13px; }
+.panel svg text.bang { font-family: var(--display); font-size: 22px; letter-spacing: 0.04em; }
+.note {
+  margin: 0;
+  border-top: 3px dashed var(--ink);
+  padding: 9px 14px 11px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--note);
+  overflow-wrap: anywhere;
+}
+.note code { color: var(--ink); font-weight: 500; }
+.end { background: var(--caption); }
+.end .cap { background: var(--ink); color: var(--paper); }
+.end ol { margin: 0; padding: 14px 18px 16px 44px; display: grid; gap: 6px; font-size: 19px; }
+.end ol li::marker { font-family: var(--display); color: var(--red); }
+.end p { margin: 0; padding: 0 18px 16px; font-size: 16px; }
+.back { justify-self: start; font-family: var(--display); font-size: 20px; letter-spacing: 0.04em;
+  color: var(--ink); background: var(--paper); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink);
+  padding: 4px 12px; text-decoration: none; }
+.back:hover { background: var(--caption); }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="laptop" viewBox="0 0 120 95">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="12" y="4" width="96" height="64" rx="8" fill="#bcd7ff"/>
+        <circle cx="46" cy="30" r="5" fill="#1d1a2b"/><circle cx="74" cy="30" r="5" fill="#1d1a2b"/>
+        <circle cx="36" cy="44" r="4" fill="#ff9fb6" stroke="none"/><circle cx="84" cy="44" r="4" fill="#ff9fb6" stroke="none"/>
+        <path d="M46 44 Q60 56 74 44" fill="none"/>
+        <path d="M2 72 H118 L108 90 H12 Z" fill="#c9ced8"/>
+      </g>
+    </symbol>
+    <symbol id="mini" viewBox="0 0 150 80">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="5" y="18" width="140" height="54" rx="16" fill="#dde2ea"/>
+        <path d="M24 27 H126" stroke="#ffffff" stroke-width="4"/>
+        <circle cx="58" cy="42" r="5" fill="#1d1a2b"/><circle cx="92" cy="42" r="5" fill="#1d1a2b"/>
+        <path d="M62 53 Q75 63 88 53" fill="none"/>
+        <circle cx="128" cy="60" r="3.5" fill="#52d273" stroke="none"/>
+      </g>
+    </symbol>
+    <symbol id="node" viewBox="0 0 110 122">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M40 98 L37 118 M70 98 L73 118" fill="none"/>
+        <polygon points="55,7 97,31 97,79 55,103 13,79 13,31" fill="#5cc46b"/>
+        <circle cx="41" cy="48" r="9" fill="#ffffff"/><circle cx="69" cy="48" r="9" fill="#ffffff"/>
+        <circle cx="43" cy="49" r="3.5" fill="#1d1a2b"/><circle cx="71" cy="49" r="3.5" fill="#1d1a2b"/>
+        <path d="M42 66 Q55 78 68 66" fill="none"/>
+        <polygon points="55,84 49,94 55,106 61,94" fill="#e8483b"/>
+      </g>
+    </symbol>
+    <symbol id="ghost" viewBox="0 0 100 110">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M12 100 V50 A38 38 0 0 1 88 50 V100 L75 90 L62 100 L50 90 L38 100 L25 90 Z" fill="#ffffff"/>
+        <circle cx="38" cy="50" r="6" fill="#1d1a2b"/><circle cx="62" cy="50" r="6" fill="#1d1a2b"/>
+        <path d="M40 66 Q50 75 60 66" fill="none"/>
+        <circle cx="50" cy="83" r="9" fill="#ffd34d"/><circle cx="50" cy="83" r="4" fill="#3a7bd5"/>
+      </g>
+    </symbol>
+    <symbol id="ghostcap" viewBox="0 0 100 120">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M12 110 V60 A38 38 0 0 1 88 60 V110 L75 100 L62 110 L50 100 L38 110 L25 100 Z" fill="#ffffff"/>
+        <path d="M16 42 Q40 6 92 10 Q72 22 82 40 Z" fill="#3a7bd5"/>
+        <circle cx="93" cy="10" r="7" fill="#ffffff"/>
+        <circle cx="38" cy="62" r="6" fill="#ffffff"/><circle cx="62" cy="62" r="6" fill="#ffffff"/>
+        <circle cx="38" cy="63" r="3" fill="#1d1a2b"/><circle cx="62" cy="63" r="3" fill="#1d1a2b"/>
+        <ellipse cx="50" cy="80" rx="6" ry="7" fill="#1d1a2b"/>
+      </g>
+    </symbol>
+    <symbol id="clj" viewBox="0 0 100 135">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M16 132 V98 Q16 76 50 76 Q84 76 84 98 V132 Z" fill="#7e5bd6"/>
+        <path d="M42 92 L58 124 M50 108 L40 124" fill="none" stroke="#ffffff" stroke-width="4"/>
+        <circle cx="50" cy="14" r="10" fill="#6b4a2b"/>
+        <circle cx="50" cy="44" r="30" fill="#ffd9b8"/>
+        <path d="M22 36 Q50 6 78 36" fill="#6b4a2b"/>
+        <circle cx="39" cy="46" r="9" fill="#ffffff"/><circle cx="61" cy="46" r="9" fill="#ffffff"/>
+        <path d="M48 46 H52" fill="none"/>
+        <circle cx="39" cy="46" r="3" fill="#1d1a2b" stroke="none"/><circle cx="61" cy="46" r="3" fill="#1d1a2b" stroke="none"/>
+        <path d="M42 61 Q50 67 58 61" fill="none"/>
+      </g>
+    </symbol>
+    <symbol id="butler" viewBox="0 0 100 135">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M16 132 V98 Q16 76 50 76 Q84 76 84 98 V132 Z" fill="#2c2a3a"/>
+        <path d="M38 78 L50 112 L62 78 Z" fill="#ffffff"/>
+        <path d="M40 84 L50 89 L60 84 L60 94 L50 89 L40 94 Z" fill="#e8483b"/>
+        <circle cx="50" cy="44" r="30" fill="#f2c9a0"/>
+        <path d="M22 34 Q50 4 78 34 Q50 22 22 34 Z" fill="#2c2a3a"/>
+        <circle cx="40" cy="44" r="3.5" fill="#1d1a2b"/><circle cx="60" cy="44" r="3.5" fill="#1d1a2b"/>
+        <path d="M36 58 Q43 52 50 57 Q57 52 64 58 Q57 62 50 59 Q43 62 36 58 Z" fill="#2c2a3a"/>
+      </g>
+    </symbol>
+    <symbol id="phone" viewBox="0 0 70 120">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="4" y="4" width="62" height="112" rx="12" fill="#ff8fab"/>
+        <rect x="11" y="16" width="48" height="84" rx="5" fill="#ffffff"/>
+        <circle cx="27" cy="48" r="4" fill="#1d1a2b"/><circle cx="43" cy="48" r="4" fill="#1d1a2b"/>
+        <path d="M27 62 Q35 70 43 62" fill="none"/>
+      </g>
+    </symbol>
+    <symbol id="jar" viewBox="0 0 90 110">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M14 22 H76 Q84 22 84 34 V96 Q84 106 72 106 H18 Q6 106 6 96 V34 Q6 22 14 22 Z" fill="#d8f0ff"/>
+        <circle cx="30" cy="84" r="13" fill="#c98a4b"/><circle cx="58" cy="86" r="13" fill="#c98a4b"/><circle cx="44" cy="64" r="13" fill="#c98a4b"/>
+        <circle cx="27" cy="82" r="2" fill="#4a2c14" stroke="none"/><circle cx="60" cy="84" r="2" fill="#4a2c14" stroke="none"/><circle cx="46" cy="62" r="2" fill="#4a2c14" stroke="none"/>
+        <rect x="18" y="6" width="54" height="16" rx="4" fill="#e8483b"/>
+        <rect x="18" y="32" width="54" height="20" rx="3" fill="#ffffff"/>
+      </g>
+      <text x="45" y="47" text-anchor="middle" style="font-family:'Patrick Hand','Comic Sans MS',cursive;font-size:14px;fill:#1d1a2b">X login</text>
+    </symbol>
+    <symbol id="clock" viewBox="0 0 90 100">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <circle cx="20" cy="20" r="12" fill="#e8483b"/><circle cx="70" cy="20" r="12" fill="#e8483b"/>
+        <path d="M24 88 L16 98 M66 88 L74 98" fill="none"/>
+        <circle cx="45" cy="56" r="34" fill="#ffffff"/>
+        <path d="M45 56 V34 M45 56 L60 64" fill="none"/>
+      </g>
+    </symbol>
+    <symbol id="box" viewBox="0 0 100 84">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M4 22 L18 6 H82 L96 22 Z" fill="#e9b877"/>
+        <rect x="4" y="22" width="92" height="58" fill="#d8a25e"/>
+        <rect x="42" y="22" width="16" height="22" fill="#f4e3b5"/>
+      </g>
+    </symbol>
+    <symbol id="chest" viewBox="0 0 120 100">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M6 44 Q6 8 60 8 Q114 8 114 44 Z" fill="#b8763a"/>
+        <rect x="6" y="44" width="108" height="52" fill="#a9692f"/>
+        <path d="M30 10 V96 M90 10 V96" fill="none" stroke="#f0c040" stroke-width="7"/>
+        <path d="M30 10 V96 M90 10 V96" fill="none" stroke-width="1.5"/>
+        <rect x="50" y="38" width="20" height="24" rx="3" fill="#f0c040"/>
+        <circle cx="60" cy="50" r="3" fill="#1d1a2b"/>
+      </g>
+    </symbol>
+    <symbol id="safe" viewBox="0 0 100 100">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="6" y="6" width="88" height="86" rx="8" fill="#8f9bb0"/>
+        <rect x="16" y="16" width="68" height="66" rx="4" fill="#a7b2c5"/>
+        <circle cx="50" cy="49" r="17" fill="#e7ebf2"/>
+        <path d="M50 34 V40 M50 58 V64 M35 49 H41 M59 49 H65" fill="none"/>
+        <circle cx="50" cy="49" r="5" fill="#1d1a2b"/>
+        <path d="M14 92 V98 M86 92 V98" fill="none"/>
+      </g>
+    </symbol>
+    <symbol id="papers" viewBox="0 0 90 100">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="18" y="4" width="66" height="84" rx="3" fill="#ffffff" transform="rotate(6 51 46)"/>
+        <rect x="10" y="10" width="66" height="84" rx="3" fill="#ffffff"/>
+        <path d="M20 26 H66 M20 38 H66 M20 50 H58 M20 62 H66 M20 74 H50" fill="none" stroke-width="2.5" stroke="#9aa6c0"/>
+      </g>
+    </symbol>
+    <symbol id="flag" viewBox="0 0 60 100">
+      <g stroke="#1d1a2b" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M10 96 V6" fill="none"/>
+        <path d="M10 8 L54 22 L10 38 Z" fill="#e8483b"/>
+      </g>
+    </symbol>
+    <symbol id="photo" viewBox="0 0 40 32">
+      <g stroke="#1d1a2b" stroke-width="2.5" stroke-linejoin="round">
+        <rect x="2" y="2" width="36" height="28" rx="3" fill="#ffffff"/>
+        <path d="M6 26 L16 14 L23 21 L28 16 L35 26 Z" fill="#5cc46b"/>
+        <circle cx="29" cy="9" r="3" fill="#ffd34d"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="book">
+  <a class="back" href="./">&larr; Back to the guide</a>
+  <header class="cover">
+    <h1>How Your Likes Archive Works</h1>
+    <p>A comic about the Mac Mini, the laptop and the little programs that save your liked tweets. Every panel ends with the real file or command, so you can look it up.</p>
+  </header>
+
+  <div class="grid">
+
+    <!-- 1 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>1</span>Meet the cast</b>Two computers. The laptop is the workshop. The Mac Mini is the house where the archive actually lives and runs.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="The laptop and the Mac Mini introduce themselves">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <use href="#laptop" x="20" y="122" width="140" height="111"/>
+        <use href="#mini" x="215" y="150" width="170" height="91"/>
+        <g><path d="M70 74 L82 116 L100 74 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="12" y="14" width="186" height="62" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="25" y="39"><tspan x="25">I'm the laptop. The code</tspan><tspan x="25" dy="19">lives here, in Git.</tspan></text></g>
+        <g><path d="M285 118 L298 158 L314 118 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="208" y="36" width="182" height="84" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="221" y="61"><tspan x="221">I'm the Mac Mini. I run</tspan><tspan x="221" dy="19">everything, and I keep</tspan><tspan x="221" dy="19">all your likes.</tspan></text></g>
+      </svg>
+      <p class="note">Laptop: the Git repo, where Claude Code edits. Mini: <code>~/twitter-scraper</code>, a plain copy (not a Git checkout).</p>
+    </figure>
+
+    <!-- 2 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>2</span>Moving day</b>New code travels to the Mini over SSH, like a box of parts. Nothing happens automatically, and the Mini has no Git.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="The laptop sends a box of code to the Mini">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <use href="#laptop" x="10" y="140" width="120" height="95"/>
+        <use href="#mini" x="250" y="162" width="140" height="75"/>
+        <path d="M118 142 H138 M112 158 H136 M118 174 H138" stroke="#1d1a2b" stroke-width="3" stroke-linecap="round"/>
+        <use href="#box" x="148" y="118" width="94" height="79"/>
+        <text x="195" y="178" text-anchor="middle" class="small">code only</text>
+        <text x="195" y="222" text-anchor="middle" class="bang" fill="#3a7bd5" style="fill:#3a7bd5">VIA SSH!</text>
+        <g transform="rotate(-3 100 44)"><rect x="10" y="16" width="184" height="56" fill="#ffe14d" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="20" y="39" class="small"><tspan x="20">Deleted a file in Git?</tspan><tspan x="20" dy="18">Delete it on the Mini too.</tspan></text></g>
+        <g><path d="M318 126 L326 160 L342 126 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="232" y="66" width="160" height="62" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="245" y="91"><tspan x="245">Code only, please.</tspan><tspan x="245" dy="19">My data stays put.</tspan></text></g>
+      </svg>
+      <p class="note"><code>git archive HEAD … | ssh MINI 'tar -xf - -C ~/twitter-scraper'</code>. The archive/ and .service/ folders are never in the box.</p>
+    </figure>
+
+    <!-- 3 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>3</span>Unpack, test, restart</b>On the Mini: install packages if they changed, run every test, build the web app, then restart the service.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="The Mini works through a checklist">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <use href="#mini" x="18" y="150" width="170" height="91"/>
+        <rect x="218" y="38" width="168" height="194" rx="8" fill="#fff" stroke="#1d1a2b" stroke-width="3.5"/>
+        <rect x="268" y="28" width="68" height="22" rx="5" fill="#c9ced8" stroke="#1d1a2b" stroke-width="3"/>
+        <g stroke="#1d1a2b" stroke-width="3" fill="#fff">
+          <rect x="232" y="72" width="20" height="20" rx="3"/><rect x="232" y="112" width="20" height="20" rx="3"/>
+          <rect x="232" y="152" width="20" height="20" rx="3"/><rect x="232" y="192" width="20" height="20" rx="3"/>
+        </g>
+        <g stroke="#2f9e44" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M235 81 L242 88 L256 68"/><path d="M235 121 L242 128 L256 108"/>
+          <path d="M235 161 L242 168 L256 148"/><path d="M235 201 L242 208 L256 188"/>
+        </g>
+        <text x="263" y="88">Install packages</text><text x="263" y="128">Run the tests</text>
+        <text x="263" y="168">Build the web app</text><text x="263" y="208">Restart</text>
+        <g><path d="M78 118 L92 154 L106 118 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="14" y="58" width="180" height="62" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="27" y="83"><tspan x="27">All green. Time for</tspan><tspan x="27" dy="19">a kickstart!</tspan></text></g>
+      </svg>
+      <p class="note">Restart: <code>launchctl kickstart -k gui/$(id -u)/local.twitter-archive</code>. Or rerun <code>scripts/install-mini.sh</code>, which does all four.</p>
+    </figure>
+
+    <!-- 4 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>4</span>The toolbox comes first</b>Before any of this works, Homebrew installs the tools. Java hides in a drawer of its own.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="A toolbox of Node, Clojure, Chrome, Tailscale and Python, with Java in a separate drawer">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <path d="M110 128 V108 Q110 96 122 96 H168 Q180 96 180 108 V128" fill="none" stroke="#1d1a2b" stroke-width="5"/>
+        <g stroke="#1d1a2b" stroke-width="3">
+          <rect x="30" y="70" width="42" height="80" rx="8" fill="#5cc46b"/>
+          <rect x="78" y="62" width="42" height="88" rx="8" fill="#9b7be6"/>
+          <rect x="126" y="74" width="42" height="76" rx="8" fill="#ffffff"/>
+          <rect x="174" y="58" width="42" height="92" rx="8" fill="#6ea3ee"/>
+          <rect x="222" y="72" width="42" height="78" rx="8" fill="#ffd34d"/>
+        </g>
+        <text class="small" transform="translate(56 99) rotate(-90)" text-anchor="middle">Node</text>
+        <text class="small" transform="translate(104 95) rotate(-90)" text-anchor="middle">Clojure</text>
+        <text class="small" transform="translate(152 101) rotate(-90)" text-anchor="middle">Chrome</text>
+        <text class="small" transform="translate(200 93) rotate(-90)" text-anchor="middle">Tailscale</text>
+        <text class="small" transform="translate(248 100) rotate(-90)" text-anchor="middle">Python</text>
+        <rect x="20" y="128" width="254" height="104" rx="6" fill="#e8483b" stroke="#1d1a2b" stroke-width="3.5"/>
+        <text x="147" y="190" text-anchor="middle" class="bang" style="fill:#ffffff">HOMEBREW</text>
+        <rect x="290" y="166" width="96" height="66" rx="6" fill="#c98a4b" stroke="#1d1a2b" stroke-width="3.5"/>
+        <rect x="302" y="194" width="72" height="28" rx="4" fill="#a96f35" stroke="#1d1a2b" stroke-width="3"/>
+        <circle cx="318" cy="186" r="3.5" fill="#1d1a2b"/><circle cx="358" cy="186" r="3.5" fill="#1d1a2b"/>
+        <text x="338" y="213" text-anchor="middle" class="small" style="fill:#ffffff">Java 21</text>
+        <g><path d="M320 126 L330 166 L346 126 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="262" y="26" width="132" height="102" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="275" y="51"><tspan x="275">Typing java</tspan><tspan x="275" dy="19">won't find me.</tspan><tspan x="275" dy="19">Ask by address:</tspan><tspan x="275" dy="19">JAVA_HOME!</tspan></text></g>
+      </svg>
+      <p class="note">Java 21 is "keg-only", so it isn't on the PATH. The service sets <code>JAVA_HOME=/opt/homebrew/opt/openjdk@21/…</code>. <code>clojure -P</code> downloads the importer's libraries into ~/.m2.</p>
+    </figure>
+
+    <!-- 5 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>5</span>The butler named launchd</b>macOS has a butler. A note called a LaunchAgent tells him: start Node when you log into the Mini, and pick it back up if it ever falls.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="The launchd butler helps Node up after a fall">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <use href="#butler" x="34" y="94" width="110" height="148"/>
+        <path d="M128 186 Q170 176 200 190" fill="none" stroke="#1d1a2b" stroke-width="9" stroke-linecap="round"/>
+        <path d="M128 186 Q170 176 200 190" fill="none" stroke="#2c2a3a" stroke-width="5" stroke-linecap="round"/>
+        <g transform="rotate(-22 240 196)"><use href="#node" x="190" y="142" width="96" height="106"/></g>
+        <path d="M300 150 l10 -8 M306 166 l14 -2 M296 136 l4 -12" stroke="#1d1a2b" stroke-width="3" stroke-linecap="round"/>
+        <g><path d="M62 74 L78 112 L94 74 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="12" y="14" width="150" height="62" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="25" y="39"><tspan x="25">Up you get.</tspan><tspan x="25" dy="19">Back to work!</tspan></text></g>
+        <g><path d="M262 100 L244 146 L286 100 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="206" y="38" width="184" height="64" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="219" y="63"><tspan x="219">I tripped! Good thing</tspan><tspan x="219" dy="19">you always catch me.</tspan></text></g>
+      </svg>
+      <p class="note"><code>~/Library/LaunchAgents/local.twitter-archive.plist</code> (RunAtLoad, KeepAlive). It's a per-user job, so after a reboot someone has to log into the Mini.</p>
+    </figure>
+
+    <!-- 6 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>6</span>Node runs the front desk</b>Node is the only program that's always running. One process with four jobs.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="Node behind a desk with four job signs">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <use href="#node" x="148" y="58" width="104" height="115"/>
+        <rect x="40" y="160" width="320" height="76" rx="6" fill="#c98a4b" stroke="#1d1a2b" stroke-width="3.5"/>
+        <g stroke="#1d1a2b" stroke-width="3" fill="#fff">
+          <rect x="52" y="174" width="68" height="48" rx="4"/><rect x="128" y="174" width="68" height="48" rx="4"/>
+          <rect x="204" y="174" width="68" height="48" rx="4"/><rect x="280" y="174" width="68" height="48" rx="4"/>
+        </g>
+        <g class="small" text-anchor="middle">
+          <text x="86" y="194" class="small" text-anchor="middle"><tspan x="86">Serve the</tspan><tspan x="86" dy="16">web app</tspan></text>
+          <text x="162" y="194" class="small" text-anchor="middle"><tspan x="162">Guard</tspan><tspan x="162" dy="16">your data</tspan></text>
+          <text x="238" y="194" class="small" text-anchor="middle"><tspan x="238">Update</tspan><tspan x="238" dy="16">timer</tspan></text>
+          <text x="314" y="194" class="small" text-anchor="middle"><tspan x="314">Related,</tspan><tspan x="314" dy="16">translate</tspan></text>
+        </g>
+        <g><path d="M258 72 L234 96 L284 72 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="236" y="12" width="156" height="62" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="249" y="37"><tspan x="249">One process,</tspan><tspan x="249" dy="19">four jobs!</tspan></text></g>
+        <g><path d="M120 72 L158 92 L136 72 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="10" y="12" width="150" height="62" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="23" y="37"><tspan x="23">Find me at</tspan><tspan x="23" dy="19">127.0.0.1:4318</tspan></text></g>
+      </svg>
+      <p class="note"><code>service/server.mjs</code>. It only listens on 127.0.0.1, so nothing outside the Mini can reach it directly.</p>
+    </figure>
+
+    <!-- 7 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>7</span>The secret knock</b>Your phone reaches Node through a Tailscale Funnel tunnel. The bookmark hides a secret after the #. Node trades it for a cookie.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="The phone goes through the Tailscale tunnel and Node hands it a cookie">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <path d="M110 240 V140 A95 95 0 0 1 300 140 V240 Z" fill="#3a7bd5" stroke="#1d1a2b" stroke-width="3.5"/>
+        <path d="M140 240 V150 A65 65 0 0 1 270 150 V240 Z" fill="#1d1a2b"/>
+        <text x="205" y="76" text-anchor="middle" class="bang" style="fill:#ffffff">FUNNEL</text>
+        <path d="M168 200 H236" stroke="#ffe14d" stroke-width="3" stroke-dasharray="7 7"/>
+        <path d="M228 192 L240 200 L228 208" fill="none" stroke="#ffe14d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <use href="#phone" x="28" y="134" width="60" height="103"/>
+        <use href="#node" x="308" y="146" width="80" height="89"/>
+        <circle cx="304" cy="206" r="13" fill="#c98a4b" stroke="#1d1a2b" stroke-width="3"/>
+        <circle cx="300" cy="202" r="2" fill="#4a2c14"/><circle cx="308" cy="209" r="2" fill="#4a2c14"/>
+        <g><path d="M48 74 L56 130 L70 74 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="8" y="14" width="124" height="62" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="21" y="39"><tspan x="21">Here's the</tspan><tspan x="21" dy="19">secret after #</tspan></text></g>
+        <g><path d="M336 92 L348 146 L362 92 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="256" y="12" width="138" height="82" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="269" y="37"><tspan x="269">It matches!</tspan><tspan x="269" dy="19">Have a cookie.</tspan><tspan x="269" dy="19">Good for a year.</tspan></text></g>
+      </svg>
+      <p class="note"><code>https://MINI.TAILNET.ts.net:8443</code> → <code>127.0.0.1:4318</code>. The secret is in <code>.service/access.json</code>. Without the cookie, every page sends you back to unlock.</p>
+    </figure>
+
+    <!-- 8 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>8</span>Wake up, Chrome!</b>Every 4 hours, or when you tap Update now, Node wakes Chrome. No browser stays open in between. What stays is Chrome's cookie jar, with your X login inside.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="An alarm clock wakes a sleepy headless Chrome next to a cookie jar">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <use href="#clock" x="14" y="140" width="84" height="94"/>
+        <path d="M12 150 l-8 -6 M10 168 l-10 0 M102 150 l8 -6 M104 168 l10 0" stroke="#1d1a2b" stroke-width="3" stroke-linecap="round"/>
+        <text x="56" y="132" text-anchor="middle" class="bang" transform="rotate(-8 56 132)" style="fill:#e8483b">RING!</text>
+        <use href="#ghostcap" x="150" y="112" width="104" height="125"/>
+        <use href="#jar" x="296" y="130" width="88" height="108"/>
+        <g><path d="M190 94 L204 116 L220 94 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="110" y="12" width="210" height="84" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="123" y="37"><tspan x="123">I'm up! And still logged</tspan><tspan x="123" dy="19">in, thanks to my jar.</tspan><tspan x="123" dy="19">(No window needed.)</tspan></text></g>
+      </svg>
+      <p class="note">The jar is the profile folder <code>.service/browser/</code>. Playwright connects to Chrome through a temporary local port, and closes it when done. Reconnect X opens a normal window to refill the jar.</p>
+    </figure>
+
+    <!-- 9 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>9</span>Scroll to the flag</b>Chrome scrolls your Likes page and writes down tweet IDs, newest first. It stops at the flag it planted last time.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="Chrome reads new likes from the top of the Likes page down to last time's flag">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <rect x="200" y="14" width="150" height="224" rx="8" fill="#fff" stroke="#1d1a2b" stroke-width="3.5"/>
+        <g stroke="#1d1a2b" stroke-width="2.5">
+          <rect x="210" y="24" width="130" height="34" rx="5" fill="#fff2a8"/>
+          <rect x="210" y="66" width="130" height="34" rx="5" fill="#fff2a8"/>
+          <rect x="210" y="108" width="130" height="34" rx="5" fill="#fff2a8"/>
+          <rect x="210" y="150" width="130" height="34" rx="5" fill="#eef3ff"/>
+          <rect x="210" y="192" width="130" height="34" rx="5" fill="#eef3ff"/>
+        </g>
+        <g class="small"><text x="222" y="46" class="small">NEW like</text><text x="222" y="88" class="small">NEW like</text><text x="222" y="130" class="small">NEW like</text>
+          <text x="222" y="172" class="small" style="fill:#7a7690">saved last time</text><text x="222" y="214" class="small" style="fill:#7a7690">older…</text></g>
+        <use href="#flag" x="330" y="120" width="42" height="70"/>
+        <text x="376" y="146" class="small" transform="rotate(90 376 146)">cutoff</text>
+        <use href="#ghost" x="40" y="128" width="96" height="106"/>
+        <rect x="128" y="160" width="54" height="66" rx="3" fill="#ffe14d" stroke="#1d1a2b" stroke-width="3" transform="rotate(6 155 193)"/>
+        <path d="M138 180 H172 M138 194 H172 M138 208 H164" stroke="#1d1a2b" stroke-width="2.5" transform="rotate(6 155 193)"/>
+        <g><path d="M72 92 L86 126 L102 92 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="10" y="12" width="182" height="82" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="23" y="37"><tspan x="23">3 new likes, then my</tspan><tspan x="23" dy="19">flag from last time.</tspan><tspan x="23" dy="19">Done. Back to bed!</tspan></text></g>
+      </svg>
+      <p class="note">The flag is <code>baseline</code> in <code>.service/status.json</code>. It goes by the order of your likes, not tweet dates, because you can like an old tweet today. IDs go to <code>.service/pending.txt</code>.</p>
+    </figure>
+
+    <!-- 10 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>10</span>The librarian fetches</b>The Clojure librarian takes the list of IDs and looks each tweet up in Twitter's public sources. No login needed. Then it downloads the photos and videos.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="The Clojure librarian collects tweets and photos from two public sources">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <rect x="12" y="100" width="94" height="140" rx="6" fill="#9fd3ff" stroke="#1d1a2b" stroke-width="3.5"/>
+        <rect x="294" y="100" width="94" height="140" rx="6" fill="#ffc6a8" stroke="#1d1a2b" stroke-width="3.5"/>
+        <circle cx="94" cy="174" r="4" fill="#1d1a2b"/><circle cx="306" cy="174" r="4" fill="#1d1a2b"/>
+        <text x="59" y="126" text-anchor="middle" class="small"><tspan x="59">Twitter's</tspan><tspan x="59" dy="16">public</tspan><tspan x="59" dy="16">tweet API</tspan></text>
+        <text x="341" y="126" text-anchor="middle" class="small"><tspan x="341">FxTwitter</tspan><tspan x="341" dy="16">(long tweets,</tspan><tspan x="341" dy="16">articles)</tspan></text>
+        <use href="#photo" x="112" y="108" width="40" height="32"/>
+        <use href="#photo" x="250" y="132" width="40" height="32"/>
+        <path d="M104 150 l-12 4 M106 164 l-14 0 M296 176 l12 4 M294 190 l14 0" stroke="#1d1a2b" stroke-width="3" stroke-linecap="round"/>
+        <use href="#clj" x="150" y="100" width="100" height="135"/>
+        <g><path d="M190 76 L202 104 L218 76 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="106" y="12" width="190" height="66" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="119" y="38"><tspan x="119">Text, quotes, articles,</tspan><tspan x="119" dy="19">photos and videos.</tspan></text></g>
+      </svg>
+      <p class="note">A fresh Java process each time: <code>clojure -M -m twitter-scraper.core --import .service/pending.txt --output archive-staging</code>. Chrome only made the list.</p>
+    </figure>
+
+    <!-- 11 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>11</span>Work on a copy, then swap</b>The librarian never writes on the real archive. It works on a copy, which is nearly free to make. If every new tweet came back, the copy swaps in, and the old archive waits nearby.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="Three boxes: the previous archive, the live archive, and the new staging copy">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <use href="#box" x="14" y="128" width="108" height="91"/>
+        <use href="#box" x="146" y="128" width="108" height="91"/>
+        <use href="#box" x="278" y="128" width="108" height="91"/>
+        <g fill="#1d1a2b"><circle cx="54" cy="186" r="4"/><circle cx="82" cy="186" r="4"/><circle cx="186" cy="186" r="4"/><circle cx="214" cy="186" r="4"/><circle cx="318" cy="186" r="4"/><circle cx="346" cy="186" r="4"/></g>
+        <path d="M58 200 Q68 194 78 200 M190 198 Q200 206 210 198 M322 198 Q332 208 342 198" fill="none" stroke="#1d1a2b" stroke-width="3" stroke-linecap="round"/>
+        <path d="M144 168 H126 M132 162 L124 168 L132 174 M276 168 H258 M264 162 L256 168 L264 174" fill="none" stroke="#e8483b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="68" y="236" text-anchor="middle" class="small">previous</text>
+        <text x="200" y="236" text-anchor="middle" class="small">archive (live)</text>
+        <text x="332" y="236" text-anchor="middle" class="small">staging (copy)</text>
+        <g><path d="M56 78 L64 128 L84 78 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="8" y="16" width="146" height="64" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="21" y="41"><tspan x="21">I'll wait here,</tspan><tspan x="21" dy="19">just in case.</tspan></text></g>
+        <g><path d="M316 78 L332 128 L344 78 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="236" y="16" width="156" height="64" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="249" y="41"><tspan x="249">I'm the copy with</tspan><tspan x="249" dy="19">your new likes!</tspan></text></g>
+      </svg>
+      <p class="note">The copy is an APFS clone (<code>cp -c</code>): unchanged media share disk space. If any tweet came back empty, nothing changes and the next run tries again.</p>
+    </figure>
+
+    <!-- 12 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>12</span>What's kept where</b>Everything is plain files on the Mini. No database, no cloud. There are three kinds of things.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="A treasure chest, a stack of papers and a safe">
+        <path d="M0 226 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <use href="#chest" x="12" y="114" width="126" height="105"/>
+        <use href="#papers" x="160" y="118" width="84" height="94"/>
+        <use href="#safe" x="282" y="114" width="104" height="104"/>
+        <path d="M18 112 l-6 -6 M140 110 l6 -8 M134 128 l10 -2" stroke="#f0a020" stroke-width="3" stroke-linecap="round"/>
+        <text x="75" y="242" text-anchor="middle" class="small" style="fill:#c23a2f">BACK THIS UP</text>
+        <text x="202" y="242" text-anchor="middle" class="small">can be remade</text>
+        <text x="334" y="242" text-anchor="middle" class="small">keep private</text>
+        <g><path d="M64 70 L74 112 L90 70 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="6" y="10" width="150" height="62" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="19" y="35"><tspan x="19">The master copy,</tspan><tspan x="19" dy="19">plus 14 GB media.</tspan></text></g>
+        <text x="202" y="96" text-anchor="middle" class="small"><tspan x="202">tweets.json:</tspan><tspan x="202" dy="16">the app's list</tspan></text>
+        <g><path d="M318 70 L330 112 L344 70 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="248" y="10" width="146" height="62" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="261" y="35"><tspan x="261">Your secret, X</tspan><tspan x="261" dy="19">login, the flag.</tspan></text></g>
+      </svg>
+      <p class="note">Chest: <code>archive/.tweet-cache.edn</code> + <code>media/</code>. Papers: <code>tweets.json</code>, <code>articles/*.json</code>, remade by <code>--rebuild</code>. Safe: <code>.service/</code>, never in Git.</p>
+    </figure>
+
+    <!-- 13 -->
+    <figure class="panel">
+      <figcaption class="cap"><b><span>13</span>Reading on your phone</b>Node hands your phone the React app and the zipped list of tweets. Searching, filtering and shuffling all happen on the phone, instantly.</figcaption>
+      <svg viewBox="0 0 400 250" role="img" aria-label="Node passes a zipped package to the phone; next time the phone asks if anything changed">
+        <path d="M0 240 H400" stroke="#1d1a2b" stroke-width="3"/>
+        <use href="#node" x="20" y="120" width="100" height="111"/>
+        <use href="#phone" x="306" y="116" width="70" height="120"/>
+        <path d="M134 170 H150 M130 186 H148" stroke="#1d1a2b" stroke-width="3" stroke-linecap="round"/>
+        <use href="#box" x="158" y="146" width="82" height="69"/>
+        <path d="M199 166 V206" stroke="#1d1a2b" stroke-width="2.5" stroke-dasharray="4 3"/>
+        <text x="199" y="232" text-anchor="middle" class="small">0.9 MB, zipped</text>
+        <path d="M250 180 H290 M282 172 L292 180 L282 188" fill="none" stroke="#1d1a2b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <g><path d="M330 74 L340 112 L356 74 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="222" y="12" width="172" height="64" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="235" y="37"><tspan x="235">Next visit: has the</tspan><tspan x="235" dy="19">list changed?</tspan></text></g>
+        <g><path d="M60 94 L70 124 L86 94 Z" fill="#fff" stroke="#1d1a2b" stroke-width="3" stroke-linejoin="round"/>
+          <rect x="8" y="30" width="176" height="66" rx="16" fill="#fff" stroke="#1d1a2b" stroke-width="3"/>
+          <text x="21" y="56"><tspan x="21">Nope. "304": keep</tspan><tspan x="21" dy="19">what you have.</tspan></text></g>
+      </svg>
+      <p class="note">The app loads the list once when it opens, so reload it after an update to see new likes. Photos and videos load as you scroll.</p>
+    </figure>
+
+    <!-- 14 -->
+    <figure class="panel end">
+      <figcaption class="cap"><b><span>THE END</span>The whole story in one breath</b></figcaption>
+      <ol>
+        <li>Code is written on the laptop and copied to the Mini over SSH.</li>
+        <li>launchd keeps one Node program running on the Mini.</li>
+        <li>Every 4 hours Node wakes a windowless Chrome, which is still logged into X.</li>
+        <li>Chrome lists the new like IDs down to last time's flag, then closes.</li>
+        <li>The Clojure librarian fetches each tweet and its media into a copy.</li>
+        <li>If everything checks out, the copy becomes the archive.</li>
+        <li>Your phone gets in through the Funnel tunnel with the bookmark's secret, and reads it all.</li>
+      </ol>
+      <p>The full written version, with every command, is ARCHITECTURE.md in the repo.</p>
+    </figure>
+
+  </div>
+</div>
+
+</body>
+</html>
